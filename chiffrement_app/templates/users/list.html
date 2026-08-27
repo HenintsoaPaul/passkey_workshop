@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Annuaire des Signataires - Signature Électronique{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-7">
+        <h1 class="h3 fw-bold mb-1 text-white">Annuaire des Signataires</h1>
+        <p class="text-token-muted mb-0">Consultez et recherchez les utilisateurs et signataires enregistrés sur la plateforme.</p>
+    </div>
+    <div class="col-md-5 mt-3 mt-md-0">
+        <form method="GET" action="{% url 'chiffrement_app:user_list' %}">
+            <div class="input-group">
+                <input type="text" name="q" class="form-control form-control-custom" placeholder="Rechercher par nom, email, organisation..." value="{{ query|default:'' }}">
+                <button type="submit" class="btn btn-gradient-primary">
+                    <i class="fa-solid fa-magnifying-glass me-1"></i>Rechercher
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+    {% for u in users %}
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card-custom p-4 h-100 d-flex flex-column justify-content-between">
+                <div>
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        {% if u.profile.avatar %}
+                            <img src="{{ u.profile.avatar.url }}" alt="Avatar" class="rounded-circle" style="width: 54px; height: 54px; object-fit: cover; border: 2px solid var(--token-accent-indigo);">
+                        {% elif u.profile.profile_picture %}
+                            <img src="{{ u.profile.profile_picture.url }}" alt="Photo" class="rounded-circle" style="width: 54px; height: 54px; object-fit: cover; border: 2px solid var(--token-accent-indigo);">
+                        {% else %}
+                            <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold fs-4" style="width: 54px; height: 54px; background: linear-gradient(135deg, var(--token-primary) 0%, var(--token-secondary) 100%);">
+                                {{ u.username|slice:":1"|upper }}
+                            </div>
+                        {% endif %}
+                        <div>
+                            <h5 class="fw-bold mb-0 text-white">{{ u.profile.name|default:u.username }}</h5>
+                            <span class="text-token-muted small">@{{ u.username }}</span>
+                        </div>
+                    </div>
+
+                    <div class="small mb-3">
+                        <div class="d-flex align-items-center mb-1 text-token-secondary">
+                            <i class="fa-solid fa-building me-2" style="color: var(--token-accent-indigo);"></i>
+                            <span>{{ u.profile.organization|default:"Organisation non renseignée" }}</span>
+                        </div>
+                        <div class="d-flex align-items-center mb-1 text-token-secondary">
+                            <i class="fa-solid fa-briefcase me-2" style="color: var(--token-accent-indigo);"></i>
+                            <span>{{ u.profile.job_title|default:"Fonction non renseignée" }}</span>
+                        </div>
+                        <div class="d-flex align-items-center text-token-secondary">
+                            <i class="fa-solid fa-envelope me-2" style="color: var(--token-accent-indigo);"></i>
+                            <span>{{ u.email|default:"Email non renseigné" }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-3 border-top d-flex justify-content-between align-items-center" style="border-color: var(--token-border) !important;">
+                    <span class="badge text-token-muted px-2 py-1" style="background: var(--token-bg-surface); border: 1px solid var(--token-border);">
+                        {{ u.documents.count }} doc(s)
+                    </span>
+                    <a href="{% url 'chiffrement_app:user_detail' user_id=u.id %}" class="btn btn-sm btn-outline-custom">
+                        Voir profil <i class="fa-solid fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <div class="col-12 text-center py-5 text-token-muted">
+            <i class="fa-solid fa-user-slash fs-1 mb-3 opacity-50"></i>
+            <p class="mb-0 fs-5">Aucun utilisateur trouvé.</p>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -7,11 +7,11 @@
     <div class="col-12 col-md-8 col-lg-5">
         <div class="card-custom p-4 p-md-5">
             <div class="text-center mb-4">
-                <div class="d-inline-flex align-items-center justify-content-center bg-indigo-500-20 text-indigo-400 rounded-circle mb-3" style="width: 64px; height: 64px; background: rgba(99, 102, 241, 0.15);">
-                    <i class="fa-solid fa-lock fs-3 text-indigo-400" style="color: #818cf8;"></i>
+                <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style="width: 64px; height: 64px; background: rgba(165, 180, 252, 0.15);">
+                    <i class="fa-solid fa-lock fs-3" style="color: var(--token-accent-indigo);"></i>
                 </div>
-                <h2 class="h3 fw-bold mb-1">Connexion</h2>
-                <p class="text-muted small">Accédez à votre espace de signature de documents</p>
+                <h2 class="h3 fw-bold mb-1 text-white">Connexion</h2>
+                <p class="text-token-muted small">Accédez à votre espace de signature de documents</p>
             </div>
 
             {% if error %}
@@ -24,9 +24,9 @@
                 {% csrf_token %}
 
                 <div class="mb-3">
-                    <label for="username" class="form-label text-muted small fw-semibold">Nom d'utilisateur</label>
+                    <label for="username" class="form-label">Nom d'utilisateur</label>
                     <div class="input-group">
-                        <span class="input-group-text bg-dark-600 border-end-0 text-muted" style="background: rgba(15, 23, 42, 0.6); border-color: rgba(255, 255, 255, 0.1);">
+                        <span class="input-group-text border-end-0 text-token-muted" style="background: var(--token-bg-input); border-color: var(--token-border-strong);">
                             <i class="fa-solid fa-user"></i>
                         </span>
                         <input type="text" class="form-control form-control-custom border-start-0 ps-0" id="username" name="username" placeholder="votre_pseudo" required>
@@ -34,9 +34,9 @@
                 </div>
 
                 <div class="mb-4">
-                    <label for="password" class="form-label text-muted small fw-semibold">Mot de passe</label>
+                    <label for="password" class="form-label">Mot de passe</label>
                     <div class="input-group">
-                        <span class="input-group-text bg-dark-600 border-end-0 text-muted" style="background: rgba(15, 23, 42, 0.6); border-color: rgba(255, 255, 255, 0.1);">
+                        <span class="input-group-text border-end-0 text-token-muted" style="background: var(--token-bg-input); border-color: var(--token-border-strong);">
                             <i class="fa-solid fa-key"></i>
                         </span>
                         <input type="password" class="form-control form-control-custom border-start-0 ps-0" id="password" name="password" placeholder="••••••••" required>
@@ -48,10 +48,10 @@
                 </button>
             </form>
 
-            <div class="text-center pt-3 border-top" style="border-color: rgba(255, 255, 255, 0.1) !important;">
-                <p class="text-muted small mb-0">
+            <div class="text-center pt-3 border-top" style="border-color: var(--token-border) !important;">
+                <p class="text-token-muted small mb-0">
                     Vous n'avez pas de compte ? 
-                    <a href="{% url 'chiffrement_app:register' %}" class="text-indigo-400 text-decoration-none fw-semibold" style="color: #818cf8;">Créer un compte</a>
+                    <a href="{% url 'chiffrement_app:register' %}" class="text-decoration-none fw-semibold" style="color: var(--token-accent-indigo);">Créer un compte</a>
                 </p>
             </div>
         </div>

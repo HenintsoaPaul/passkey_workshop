@@ -6,13 +6,13 @@
 <div class="row justify-content-center my-4">
     <div class="col-12 col-md-10 col-lg-8">
         <div class="card-custom p-4 p-md-5">
-            <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom" style="border-color: rgba(255, 255, 255, 0.1) !important;">
-                <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px; background: rgba(99, 102, 241, 0.15);">
-                    <i class="fa-solid fa-file-circle-plus fs-3" style="color: #818cf8;"></i>
+            <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px; background: rgba(165, 180, 252, 0.15);">
+                    <i class="fa-solid fa-file-circle-plus fs-3" style="color: var(--token-accent-indigo);"></i>
                 </div>
                 <div>
-                    <h2 class="h3 fw-bold mb-1">Nouveau Document</h2>
-                    <p class="text-muted small mb-0">Déposez un nouveau document pour lancer un processus de signature</p>
+                    <h2 class="h3 fw-bold mb-1 text-white">Nouveau Document</h2>
+                    <p class="text-token-muted small mb-0">Déposez un nouveau document pour lancer un processus de signature</p>
                 </div>
             </div>
 
@@ -21,9 +21,9 @@
 
                 <!-- Titre du document -->
                 <div class="mb-4">
-                    <label for="title" class="form-label text-muted small fw-semibold">Titre du document *</label>
+                    <label for="title" class="form-label">Titre du document *</label>
                     <div class="input-group">
-                        <span class="input-group-text border-end-0 text-muted" style="background: rgba(15, 23, 42, 0.6); border-color: rgba(255, 255, 255, 0.1);">
+                        <span class="input-group-text border-end-0 text-token-muted" style="background: var(--token-bg-input); border-color: var(--token-border-strong);">
                             <i class="fa-solid fa-heading"></i>
                         </span>
                         <input type="text" class="form-control form-control-custom border-start-0 ps-0" id="title" name="title" placeholder="ex: Contrat de prestation de service 2026.pdf" required>
@@ -32,24 +32,24 @@
 
                 <!-- Description -->
                 <div class="mb-4">
-                    <label for="description" class="form-label text-muted small fw-semibold">Description / Notes</label>
+                    <label for="description" class="form-label">Description / Notes</label>
                     <textarea class="form-control form-control-custom" id="description" name="description" rows="3" placeholder="Renseignez ici des indications ou le contexte du document..."></textarea>
                 </div>
 
                 <!-- Fichier à joindre -->
                 <div class="mb-4">
-                    <label for="file" class="form-label text-muted small fw-semibold">Fichier du document *</label>
-                    <div class="p-3 border rounded-3 text-center" style="background: rgba(15, 23, 42, 0.4); border-color: rgba(255, 255, 255, 0.15) !important;">
+                    <label for="file" class="form-label">Fichier du document *</label>
+                    <div class="p-4 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border-strong) !important;">
                         <input type="file" class="form-control form-control-custom mb-2" id="file" name="file" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg" required>
-                        <span class="text-muted small d-block">Formats supportés : PDF, DOCX, TXT, PNG, JPG (Taille max recommandée : 10 Mo)</span>
+                        <span class="text-token-muted small d-block">Formats supportés : PDF, DOCX, TXT, PNG, JPG (Taille max recommandée : 10 Mo)</span>
                     </div>
                 </div>
 
                 <!-- Date limite -->
                 <div class="mb-4">
-                    <label for="due_date" class="form-label text-muted small fw-semibold">Date limite de signature (Optionnel)</label>
+                    <label for="due_date" class="form-label">Date limite de signature (Optionnel)</label>
                     <div class="input-group">
-                        <span class="input-group-text border-end-0 text-muted" style="background: rgba(15, 23, 42, 0.6); border-color: rgba(255, 255, 255, 0.1);">
+                        <span class="input-group-text border-end-0 text-token-muted" style="background: var(--token-bg-input); border-color: var(--token-border-strong);">
                             <i class="fa-solid fa-calendar-days"></i>
                         </span>
                         <input type="datetime-local" class="form-control form-control-custom border-start-0 ps-0" id="due_date" name="due_date">
@@ -57,7 +57,7 @@
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="d-flex align-items-center justify-content-end gap-3 pt-3 border-top" style="border-color: rgba(255, 255, 255, 0.1) !important;">
+                <div class="d-flex align-items-center justify-content-end gap-3 pt-3 border-top" style="border-color: var(--token-border) !important;">
                     <a href="{% url 'chiffrement_app:dashboard' %}" class="btn btn-outline-custom">
                         <i class="fa-solid fa-xmark me-2"></i>Annuler
                     </a>

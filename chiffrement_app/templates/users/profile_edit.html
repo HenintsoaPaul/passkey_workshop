@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}Éditer mon profil - Signature Électronique{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card-custom p-4 p-md-5">
+            <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px; background: rgba(165, 180, 252, 0.15);">
+                    <i class="fa-solid fa-user-pen fs-3" style="color: var(--token-accent-indigo);"></i>
+                </div>
+                <div>
+                    <h2 class="h3 fw-bold mb-1 text-white">Modifier mon profil</h2>
+                    <p class="text-token-muted small mb-0">Mettez à jour vos informations personnelles, professionnelles et votre signature</p>
+                </div>
+            </div>
+
+            <form method="POST" action="{% url 'chiffrement_app:profile_edit' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="name" class="form-label">Nom complet</label>
+                        <input type="text" class="form-control form-control-custom" id="name" name="name" value="{{ profile.name|default:user.first_name }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label for="email" class="form-label">Adresse email</label>
+                        <input type="email" class="form-control form-control-custom" id="email" name="email" value="{{ profile.email|default:user.email }}">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="organization" class="form-label">Organisation / Entreprise</label>
+                        <input type="text" class="form-control form-control-custom" id="organization" name="organization" value="{{ profile.organization|default:'' }}" placeholder="ex: Acme Corp">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label for="job_title" class="form-label">Fonction / Poste</label>
+                        <input type="text" class="form-control form-control-custom" id="job_title" name="job_title" value="{{ profile.job_title|default:'' }}" placeholder="ex: Directeur Juridique">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="phone" class="form-label">Téléphone</label>
+                        <input type="text" class="form-control form-control-custom" id="phone" name="phone" value="{{ profile.phone|default:'' }}">
+                    </div>
+
+                    <div class="col-md-6 mb-3">
+                        <label for="city" class="form-label">Ville</label>
+                        <input type="text" class="form-control form-control-custom" id="city" name="city" value="{{ profile.city|default:'' }}">
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="address" class="form-label">Adresse complète</label>
+                    <input type="text" class="form-control form-control-custom" id="address" name="address" value="{{ profile.address|default:'' }}">
+                </div>
+
+                <div class="mb-4">
+                    <label for="bio" class="form-label">Biographie / Description</label>
+                    <textarea class="form-control form-control-custom" id="bio" name="bio" rows="3">{{ profile.bio|default:'' }}</textarea>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-md-6 mb-3 mb-md-0">
+                        <label for="avatar" class="form-label">Photo de profil / Avatar</label>
+                        <input type="file" class="form-control form-control-custom mb-1" id="avatar" name="avatar" accept="image/*">
+                        <span class="text-token-muted small d-block">Format recommandé: PNG, JPG</span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="signature_image" class="form-label">Image de Signature Numérique</label>
+                        <input type="file" class="form-control form-control-custom mb-1" id="signature_image" name="signature_image" accept="image/*">
+                        <span class="text-token-muted small d-block">Image scannée de votre manuscrit (Fond transparent recommandé)</span>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-end gap-3 pt-3 border-top" style="border-color: var(--token-border) !important;">
+                    <a href="{% url 'chiffrement_app:profile' %}" class="btn btn-outline-custom">
+                        <i class="fa-solid fa-xmark me-2"></i>Annuler
+                    </a>
+                    <button type="submit" class="btn btn-gradient-primary">
+                        <i class="fa-solid fa-floppy-disk me-2"></i>Enregistrer les modifications
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
