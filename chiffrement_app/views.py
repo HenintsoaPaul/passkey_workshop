@@ -53,14 +53,14 @@ def register(request):
         profile.save()
         
         messages.success(request, 'Votre compte a été créé avec succès')
-        return redirect('login')
+        return redirect('chiffrement_app:login')
     
     return render(request, 'register.html')
 
 
-def login(request):
+def login_view(request):
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect('chiffrement_app:dashboard')
     
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -71,7 +71,7 @@ def login(request):
         if user is not None:
             login(request, user)
             messages.success(request, 'Vous êtes connecté')
-            return redirect('dashboard')
+            return redirect('chiffrement_app:dashboard')
         else:
             messages.error(request, 'Nom d\'utilisateur ou mot de passe incorrect')
             return render(request, 'login.html', {'error': 'Nom d\'utilisateur ou mot de passe incorrect'})
@@ -79,13 +79,13 @@ def login(request):
     return render(request, 'login.html')
 
     
-def logout(request):
+def logout_view(request):
     logout(request)
-    return redirect('login')
+    return redirect('chiffrement_app:login')
 
 # ======== Dashboard ========
 
-@login_required(login_url='login')
+@login_required(login_url='chiffrement_app:login')
 def dashboard(request):
     documents = Document.objects.filter(owner=request.user)
     signature_tasks = DocumentSigner.objects.filter(
