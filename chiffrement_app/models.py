@@ -52,13 +52,16 @@ class Document(models.Model):
 
 
 class UserProfile(models.Model):
-    
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    full_name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, null=False)
+    email = models.EmailField(null=False)
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.user.username
@@ -67,3 +70,31 @@ class UserProfile(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Profil utilisateur'
         verbose_name_plural = 'Profils utilisateurs'
+
+
+class DocumentSigner(models.Model):
+
+    STATUS_CHOICES = [
+        ('pending', 'En attente'),
+        ('viewed', 'Vu'),
+        ('accepted', 'Accepté'),
+        ('signed', 'Signé'),
+        ('rejected', 'Rejeté'),
+    ]
+
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signers')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signers')
+    signature_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    signature_date = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return self.user.username
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Signataire'
+        verbose_name_plural = 'Signataires'
