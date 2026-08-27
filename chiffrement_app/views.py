@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from django.db.models import Q
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
@@ -142,3 +143,99 @@ def upload_document(request):
         #return redirect('chiffrement_app:document_detail', document_id=document.id)
     
     return render(request, 'documents/upload.html')
+
+
+# ============ Gestion des utilisateurs ============
+
+@login_required(login_url='chiffrement_app:login')
+def profile_view(request):
+    profile, created = UserProfile.objects.get_or_create(
+        user=request.user,
+        defaults={'name': request.user.get_full_name() or request.user.username, 'email': request.user.email}
+    )
+    documents_count = Document.objects.filter(owner=request.user).count()
+    signatures_count = DocumentSigner.objects.filter(user=request.user, signature_status='signed').count()
+    
+    context = {
+        'profile': profile,
+        'documents_count': documents_count,
+        'signatures_count': signatures_count,
+    }
+    return render(request, 'users/profile.html', context)
+
+
+@login_required(login_url='chiffrement_app:login')
+def profile_edit(request):
+    profile, created = UserProfile.objects.get_or_create(
+        user=request.user,
+        defaults={'name': request.user.get_full_name() or request.user.username, 'email': request.user.email}
+    )
+    
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        email = request.POST.get('email')
+        phone = request.POST.get('phone')
+        organization = request.POST.get('organization')
+        job_title = request.POST.get('job_title')
+        address = request.POST.get('address')
+        city = request.POST.get('city')
+        bio = request.POST.get('bio')
+        
+        if 'signature_image' in request.FILES:
+            profile.signature_image = request.FILES['signature_image']
+            
+        profile.name = name or profile.name
+        profile.email = email or profile.email
+        profile.phone = phone
+        profile.organization = organization
+        profile.job_title = job_title
+        profile.address = address
+        profile.city = city
+        profile.bio = bio
+        profile.save()
+        
+        if name:
+            request.user.first_name = name
+        if email:
+            request.user.email = email
+        request.user.save()
+        
+        messages.success(request, 'Votre profil a été mis à jour avec succès.')
+        return redirect('chiffrement_app:profile')
+        
+    return render(request, 'users/profile_edit.html', {'profile': profile})
+
+
+@login_required(login_url='chiffrement_app:login')
+def user_list(request):
+    query = request.GET.get('q', '').strip()
+    users = User.objects.all().select_related('profile')
+    
+    if query:
+        users = users.filter(
+            Q(username__icontains=query) |
+            Q(first_name__icontains=query) |
+            Q(email__icontains=query) |
+            Q(profile__organization__icontains=query) |
+            Q(profile__job_title__icontains=query)
+        )
+        
+    return render(request, 'users/list.html', {'users': users, 'query': query})
+
+
+@login_required(login_url='chiffrement_app:login')
+def user_detail(request, user_id):
+    user_obj = get_object_or_404(User, id=user_id)
+    profile = getattr(user_obj, 'profile', None)
+    
+    documents = Document.objects.filter(owner=user_obj)
+    signatures = DocumentSigner.objects.filter(user=user_obj)
+    
+    context = {
+        'target_user': user_obj,
+        'profile': profile,
+        'documents': documents,
+        'signatures': signatures,
+        'is_own_profile': request.user == user_obj,
+    }
+    return render(request, 'users/detail.html', context)

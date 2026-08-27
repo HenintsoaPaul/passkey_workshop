@@ -1,2 +1,7 @@
 ./.idea/**
 ./django_signature_app/**
+__pycache__/
+*.pyc
+db.sqlite3
+documents/
+signatures/
