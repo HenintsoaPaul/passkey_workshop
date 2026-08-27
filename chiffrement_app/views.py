@@ -111,21 +111,28 @@ def upload_document(request):
         description = request.POST.get('description', '')
         file = request.FILES.get('file')
         due_date = request.POST.get('due_date')
+        signer_ids = request.POST.getlist('signers')
         
         if not title or not file:
             messages.error(request, 'Titre et fichier requis.')
             return redirect('chiffrement_app:upload_document')
 
         if Document.objects.filter(title=title).exists():
+            available_users = User.objects.exclude(id=request.user.id).select_related('profile')
             messages.error(request, 'Un document avec ce titre existe déjà.')
-            return render(request, 'documents/upload.html', {'error': 'Un document avec ce titre existe déjà.'})
+            return render(request, 'documents/upload.html', {
+                'error': 'Un document avec ce titre existe déjà.',
+                'available_users': available_users
+            })
         
+        initial_status = 'pending' if signer_ids else 'draft'
+
         document = Document.objects.create(
             title=title,
             description=description,
             file=file,
             owner=request.user,
-            status='draft',
+            status=initial_status,
             due_date=due_date if due_date else None
         )
         
@@ -135,14 +142,202 @@ def upload_document(request):
             user=request.user,
             details=f'Document "{title}" créé'
         )
-        
-        messages.success(request, 'Document téléchargé avec succès!')
 
-        # ici je voudrais rediriger vers la page de detail du document mais pour le moment on va vers dashboard
-        return redirect('chiffrement_app:dashboard')
-        #return redirect('chiffrement_app:document_detail', document_id=document.id)
+        if signer_ids:
+            assigned_signers = User.objects.filter(id__in=signer_ids)
+            for signer_user in assigned_signers:
+                DocumentSigner.objects.create(
+                    document=document,
+                    user=signer_user,
+                    signature_status='pending'
+                )
+                SignatureLog.objects.create(
+                    document=document,
+                    action='created',
+                    user=request.user,
+                    details=f'Signataire {signer_user.username} affecté au document'
+                )
+        
+        messages.success(request, 'Document téléversé avec succès!')
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
     
-    return render(request, 'documents/upload.html')
+    available_users = User.objects.exclude(id=request.user.id).select_related('profile')
+    return render(request, 'documents/upload.html', {'available_users': available_users})
+
+
+@login_required(login_url='chiffrement_app:login')
+def document_detail(request, document_id):
+    document = get_object_or_404(Document, id=document_id)
+    
+    # Access check: owner or assigned signer
+    is_owner = (document.owner == request.user)
+    user_signer = DocumentSigner.objects.filter(document=document, user=request.user).first()
+    
+    if not is_owner and not user_signer and not request.user.is_staff:
+        messages.error(request, "Vous n'avez pas accès à ce document.")
+        return redirect('chiffrement_app:dashboard')
+    
+    # Track view action for assigned signers
+    if user_signer and user_signer.signature_status == 'pending':
+        user_signer.signature_status = 'viewed'
+        user_signer.save()
+        SignatureLog.objects.create(
+            document=document,
+            action='viewed',
+            user=request.user,
+            details=f'Document consulté par {request.user.username}'
+        )
+
+    signers = document.signers.select_related('user__profile').all()
+    total_signers = signers.count()
+    signed_count = signers.filter(signature_status='signed').count()
+    progress_pct = int((signed_count / total_signers) * 100) if total_signers > 0 else 0
+
+    logs = document.logs.select_related('user').all()
+    available_users = User.objects.exclude(id=document.owner.id).select_related('profile') if is_owner else None
+
+    context = {
+        'document': document,
+        'is_owner': is_owner,
+        'user_signer': user_signer,
+        'signers': signers,
+        'total_signers': total_signers,
+        'signed_count': signed_count,
+        'progress_pct': progress_pct,
+        'logs': logs,
+        'available_users': available_users,
+    }
+    return render(request, 'documents/detail.html', context)
+
+
+@login_required(login_url='chiffrement_app:login')
+def assign_signers(request, document_id):
+    document = get_object_or_404(Document, id=document_id, owner=request.user)
+    
+    if request.method == 'POST':
+        signer_ids = request.POST.getlist('signers')
+        current_signers = DocumentSigner.objects.filter(document=document)
+        
+        # Add new signers
+        for s_id in signer_ids:
+            s_user = User.objects.filter(id=s_id).first()
+            if s_user and not current_signers.filter(user=s_user).exists():
+                DocumentSigner.objects.create(
+                    document=document,
+                    user=s_user,
+                    signature_status='pending'
+                )
+                SignatureLog.objects.create(
+                    document=document,
+                    action='created',
+                    user=request.user,
+                    details=f'Signataire {s_user.username} affecté au document'
+                )
+        
+        # Remove unselected signers if they haven't signed yet
+        for existing in current_signers:
+            if str(existing.user.id) not in signer_ids and existing.signature_status != 'signed':
+                existing.delete()
+                SignatureLog.objects.create(
+                    document=document,
+                    action='created',
+                    user=request.user,
+                    details=f'Signataire {existing.user.username} retiré du document'
+                )
+                
+        # Update document status
+        updated_signers = DocumentSigner.objects.filter(document=document)
+        if updated_signers.exists():
+            signed_c = updated_signers.filter(signature_status='signed').count()
+            if signed_c == updated_signers.count():
+                document.status = 'fully_signed'
+            elif signed_c > 0:
+                document.status = 'partially_signed'
+            else:
+                document.status = 'pending'
+            document.save()
+            
+        messages.success(request, 'Signataires mis à jour avec succès.')
+        
+    return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+
+@login_required(login_url='chiffrement_app:login')
+def sign_document(request, document_id):
+    document = get_object_or_404(Document, id=document_id)
+    signer = get_object_or_404(DocumentSigner, document=document, user=request.user)
+    
+    if request.method == 'POST':
+        signer.signature_status = 'signed'
+        signer.signature_date = timezone.now()
+        signer.save()
+        
+        SignatureLog.objects.create(
+            document=document,
+            action='signed',
+            user=request.user,
+            details=f'Document signé électriquement par {request.user.username}'
+        )
+        
+        # Check total progress
+        all_signers = document.signers.all()
+        signed_count = all_signers.filter(signature_status='signed').count()
+        
+        if signed_count == all_signers.count():
+            document.status = 'fully_signed'
+        else:
+            document.status = 'partially_signed'
+        document.save()
+        
+        messages.success(request, 'Félicitations! Vous avez signé le document avec succès.')
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+        
+    return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+
+@login_required(login_url='chiffrement_app:login')
+def verify_document(request, document_id):
+    document = get_object_or_404(Document, id=document_id)
+    
+    # Recalculate current hash
+    hash_sha256 = hashlib.sha256()
+    try:
+        with document.file.open('rb') as f:
+            for chunk in f.chunks():
+                hash_sha256.update(chunk)
+        current_hash = hash_sha256.hexdigest()
+    except Exception:
+        current_hash = ""
+
+    is_valid = (current_hash == document.file_hash) and bool(document.file_hash)
+    signers = document.signers.select_related('user__profile').all()
+    logs = document.logs.select_related('user').all()
+
+    context = {
+        'document': document,
+        'current_hash': current_hash,
+        'is_valid': is_valid,
+        'signers': signers,
+        'logs': logs,
+    }
+    return render(request, 'documents/verify.html', context)
+
+
+@login_required(login_url='chiffrement_app:login')
+def archive_document(request, document_id):
+    document = get_object_or_404(Document, id=document_id, owner=request.user)
+    document.status = 'archived'
+    document.save()
+    
+    SignatureLog.objects.create(
+        document=document,
+        action='created',
+        user=request.user,
+        details=f'Document archivé par {request.user.username}'
+    )
+    
+    messages.info(request, 'Le document a été archivé.')
+    return redirect('chiffrement_app:document_detail', document_id=document.id)
 
 
 # ============ Gestion des utilisateurs ============

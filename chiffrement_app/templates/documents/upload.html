@@ -12,9 +12,15 @@
                 </div>
                 <div>
                     <h2 class="h3 fw-bold mb-1 text-white">Nouveau Document</h2>
-                    <p class="text-token-muted small mb-0">Déposez un nouveau document pour lancer un processus de signature</p>
+                    <p class="text-token-muted small mb-0">Déposez un nouveau document et affectez les signataires</p>
                 </div>
             </div>
+
+            {% if error %}
+                <div class="alert alert-danger border-0 shadow-sm mb-4">
+                    <i class="fa-solid fa-circle-exclamation me-2"></i>{{ error }}
+                </div>
+            {% endif %}
 
             <form method="POST" action="{% url 'chiffrement_app:upload_document' %}" enctype="multipart/form-data">
                 {% csrf_token %}
@@ -45,6 +51,30 @@
                     </div>
                 </div>
 
+                <!-- Affectation des Signataires -->
+                <div class="mb-4">
+                    <label class="form-label d-block">Affecter des Signataires (Optionnel)</label>
+                    <div class="p-3 border rounded-3 overflow-auto" style="max-height: 220px; background: var(--token-bg-surface); border-color: var(--token-border-strong) !important;">
+                        {% if available_users %}
+                            <div class="row g-2">
+                                {% for u in available_users %}
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-check p-2 rounded d-flex align-items-center gap-2" style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--token-border);">
+                                            <input class="form-check-input ms-0 me-2" type="checkbox" name="signers" value="{{ u.id }}" id="signer_{{ u.id }}">
+                                            <label class="form-check-label text-white small fw-medium w-100 cursor-pointer" for="signer_{{ u.id }}">
+                                                <span class="d-block fw-semibold">{{ u.profile.name|default:u.username }}</span>
+                                                <span class="text-token-muted small d-block">{{ u.profile.organization|default:u.email }}</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-token-muted small mb-0 text-center py-3">Aucun autre utilisateur disponible pour l'instant.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
                 <!-- Date limite -->
                 <div class="mb-4">
                     <label for="due_date" class="form-label">Date limite de signature (Optionnel)</label>
@@ -62,7 +92,7 @@
                         <i class="fa-solid fa-xmark me-2"></i>Annuler
                     </a>
                     <button type="submit" class="btn btn-gradient-primary">
-                        <i class="fa-solid fa-cloud-arrow-up me-2"></i>Téléverser le document
+                        <i class="fa-solid fa-cloud-arrow-up me-2"></i>Téléverser et démarrer
                     </button>
                 </div>
             </form>
