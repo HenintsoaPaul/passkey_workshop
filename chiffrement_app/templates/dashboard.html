@@ -9,9 +9,9 @@
         <p class="text-muted mb-0">Bienvenue, {{ user.get_full_name|default:user.username }} ! Voici le résumé de vos documents et signatures.</p>
     </div>
     <div class="col-md-4 text-md-end mt-3 mt-md-0">
-        <button class="btn btn-gradient-primary disabled" disabled>
+        <a href="{% url 'chiffrement_app:upload_document' %}" class="btn btn-gradient-primary">
             <i class="fa-solid fa-cloud-arrow-up me-2"></i>Nouveau document
-        </button>
+        </a>
     </div>
 </div>
 
