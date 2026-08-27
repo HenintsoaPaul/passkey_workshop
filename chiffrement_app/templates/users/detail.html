@@ -30,19 +30,19 @@
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Organisation</span>
-                        <span class="fw-semibold text-white">{{ profile.organization|default:"Non renseignée" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.organization|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Poste / Fonction</span>
-                        <span class="fw-semibold text-white">{{ profile.job_title|default:"Non renseigné" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.job_title|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Adresse email</span>
-                        <span class="fw-semibold text-white">{{ profile.email|default:target_user.email|default:"Non renseigné" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.email|default:target_user.email|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">

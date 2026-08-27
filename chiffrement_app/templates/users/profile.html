@@ -40,43 +40,43 @@
             </div>
 
             <!-- Information Details -->
-            <h5 class="fw-bold mb-3 text-white"><i class="fa-solid fa-id-card me-2" style="color: var(--token-accent-indigo);"></i>Informations Personnelles & Professionnelles</h5>
+            <h5 class="fw-bold mb-3 text-white"><i class="fa-solid fa-id-card me-2" style="color: var(--token-accent-indigo);"></i>Informations</h5>
             
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Email</span>
-                        <span class="fw-semibold text-white">{{ profile.email|default:user.email|default:"Non renseigné" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.email|default:user.email|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Téléphone</span>
-                        <span class="fw-semibold text-white">{{ profile.phone|default:"Non renseigné" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.phone|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Organisation / Entreprise</span>
-                        <span class="fw-semibold text-white">{{ profile.organization|default:"Non renseignée" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.organization|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Poste / Fonction</span>
-                        <span class="fw-semibold text-white">{{ profile.job_title|default:"Non renseigné" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.job_title|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Adresse</span>
-                        <span class="fw-semibold text-white">{{ profile.address|default:"Non renseignée" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.address|default:"--" }}</span>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                         <span class="text-token-muted small d-block mb-1">Ville</span>
-                        <span class="fw-semibold text-white">{{ profile.city|default:"Non renseignée" }}</span>
+                        <span class="fw-semibold text-white">{{ profile.city|default:"--" }}</span>
                     </div>
                 </div>
             </div>
@@ -92,7 +92,7 @@
 
             <!-- Image de Signature Numérique -->
             <div class="mb-4">
-                <h5 class="fw-bold mb-3 text-white"><i class="fa-solid fa-signature me-2" style="color: var(--token-accent-pink);"></i>Signature Numérique Enregistrée</h5>
+                <h5 class="fw-bold mb-3 text-white"><i class="fa-solid fa-signature me-2" style="color: var(--token-accent-pink);"></i>Signature Numérique</h5> Enregistrée
                 <div class="p-4 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                     {% if profile.signature_image %}
                         <img src="{{ profile.signature_image.url }}" alt="Signature Numérique" class="img-fluid bg-white p-3 rounded" style="max-height: 120px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));">

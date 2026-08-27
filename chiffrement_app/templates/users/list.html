@@ -11,9 +11,9 @@
     <div class="col-md-5 mt-3 mt-md-0">
         <form method="GET" action="{% url 'chiffrement_app:user_list' %}">
             <div class="input-group">
-                <input type="text" name="q" class="form-control form-control-custom" placeholder="Rechercher par nom, email, organisation..." value="{{ query|default:'' }}">
+                <input type="text" name="q" class="form-control form-control-custom" placeholder="Par nom, email, organisation..." value="{{ query|default:'' }}">
                 <button type="submit" class="btn btn-gradient-primary">
-                    <i class="fa-solid fa-magnifying-glass me-1"></i>Rechercher
+                    <i class="fa-solid fa-magnifying-glass me-1"></i>
                 </button>
             </div>
         </form>
@@ -38,15 +38,15 @@
                     <div class="small mb-3">
                         <div class="d-flex align-items-center mb-1 text-token-secondary">
                             <i class="fa-solid fa-building me-2" style="color: var(--token-accent-indigo);"></i>
-                            <span>{{ u.profile.organization|default:"Organisation non renseignée" }}</span>
+                            <span>{{ u.profile.organization|default:"Organisation --e" }}</span>
                         </div>
                         <div class="d-flex align-items-center mb-1 text-token-secondary">
                             <i class="fa-solid fa-briefcase me-2" style="color: var(--token-accent-indigo);"></i>
-                            <span>{{ u.profile.job_title|default:"Fonction non renseignée" }}</span>
+                            <span>{{ u.profile.job_title|default:"Fonction --e" }}</span>
                         </div>
                         <div class="d-flex align-items-center text-token-secondary">
                             <i class="fa-solid fa-envelope me-2" style="color: var(--token-accent-indigo);"></i>
-                            <span>{{ u.email|default:"Email non renseigné" }}</span>
+                            <span>{{ u.email|default:"Email --" }}</span>
                         </div>
                     </div>
                 </div>

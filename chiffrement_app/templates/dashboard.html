@@ -92,7 +92,13 @@
                             {% for doc in recent_documents %}
                                 <tr>
                                     <td>
-                                        <span class="fw-semibold d-block text-white">{{ doc.title }}</span>
+                                        <a
+                                            href="{% url 'chiffrement_app:document_detail' doc.pk %}"
+                                            class="fw-semibold d-block text-white text-decoration-none"
+                                        >
+                                            {{ doc.title }}
+                                        </a>
+                                        <!-- <span class="fw-semibold d-block text-white">{{ doc.title }}</span> -->
                                         <span class="text-token-muted small">{{ doc.description|default:"Sans description"|truncatechars:30 }}</span>
                                     </td>
                                     <td>
@@ -146,7 +152,13 @@
                             {% for task in recent_tasks %}
                                 <tr>
                                     <td>
-                                        <span class="fw-semibold d-block text-white">{{ task.document.title }}</span>
+                                        <a
+                                            href="{% url 'chiffrement_app:document_detail' task.document.pk %}"
+                                            class="fw-semibold d-block text-white text-decoration-none"
+                                        >
+                                            {{ task.document.title }}
+                                        </a>
+                                        <!-- <span class="fw-semibold d-block text-white">{{ task.document.title }}</span> -->
                                         <span class="text-token-muted small">Propriétaire: {{ task.document.owner.username }}</span>
                                     </td>
                                     <td>
