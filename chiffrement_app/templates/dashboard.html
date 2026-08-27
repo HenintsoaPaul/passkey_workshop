@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+
+{% block title %}Tableau de Bord - Signature Électronique{% endblock %}
+
+{% block content %}
+<div class="row mb-4 align-items-center">
+    <div class="col-md-8">
+        <h1 class="h3 fw-bold mb-1">Tableau de bord</h1>
+        <p class="text-muted mb-0">Bienvenue, {{ user.get_full_name|default:user.username }} ! Voici le résumé de vos documents et signatures.</p>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <button class="btn btn-gradient-primary disabled" disabled>
+            <i class="fa-solid fa-cloud-arrow-up me-2"></i>Nouveau document
+        </button>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-5">
+    <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card-custom p-4 d-flex align-items-center justify-content-between">
+            <div>
+                <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Mes Documents</span>
+                <span class="h2 fw-bold text-white mb-0">{{ documents_count }}</span>
+            </div>
+            <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(99, 102, 241, 0.15); width: 56px; height: 56px;">
+                <i class="fa-solid fa-file-contract fs-4" style="color: #818cf8;"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card-custom p-4 d-flex align-items-center justify-content-between">
+            <div>
+                <span class="text-muted small fw-semibold text-uppercase d-block mb-1">En attente</span>
+                <span class="h2 fw-bold text-white mb-0">{{ pending_signatures }}</span>
+            </div>
+            <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(245, 158, 11, 0.15); width: 56px; height: 56px;">
+                <i class="fa-solid fa-clock-history fs-4" style="color: #fbbf24;"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card-custom p-4 d-flex align-items-center justify-content-between">
+            <div>
+                <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Statut Passkey</span>
+                <span class="h6 fw-semibold text-success mb-0 d-flex align-items-center gap-1">
+                    <i class="fa-solid fa-shield-check"></i> Prêt
+                </span>
+            </div>
+            <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(16, 185, 129, 0.15); width: 56px; height: 56px;">
+                <i class="fa-solid fa-key fs-4" style="color: #34d399;"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card-custom p-4 d-flex align-items-center justify-content-between">
+            <div>
+                <span class="text-muted small fw-semibold text-uppercase d-block mb-1">Intégrité Crypto</span>
+                <span class="h6 fw-semibold text-info mb-0">SHA-256</span>
+            </div>
+            <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(59, 130, 246, 0.15); width: 56px; height: 56px;">
+                <i class="fa-solid fa-fingerprint fs-4" style="color: #60a5fa;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Recent Documents -->
+    <div class="col-12 col-lg-6">
+        <div class="card-custom p-4 h-100">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h5 class="fw-bold mb-0">
+                    <i class="fa-solid fa-folder-open text-indigo me-2" style="color: #818cf8;"></i>Mes Documents Récents
+                </h5>
+            </div>
+
+            {% if recent_documents %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle bg-transparent mb-0">
+                        <thead>
+                            <tr class="text-muted small border-bottom border-secondary">
+                                <th>Titre</th>
+                                <th>Statut</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in recent_documents %}
+                                <tr>
+                                    <td>
+                                        <span class="fw-semibold d-block text-white">{{ doc.title }}</span>
+                                        <span class="text-muted small">{{ doc.description|default:"Sans description"|truncatechars:30 }}</span>
+                                    </td>
+                                    <td>
+                                        {% if doc.status == 'draft' %}
+                                            <span class="badge badge-status badge-draft">Brouillon</span>
+                                        {% elif doc.status == 'pending' %}
+                                            <span class="badge badge-status badge-pending">En attente</span>
+                                        {% elif doc.status == 'partially_signed' %}
+                                            <span class="badge badge-status badge-partially">Partiel</span>
+                                        {% elif doc.status == 'fully_signed' %}
+                                            <span class="badge badge-status badge-signed">Signé</span>
+                                        {% else %}
+                                            <span class="badge badge-status badge-archived">{{ doc.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted small">{{ doc.created_at|date:"d/m/Y H:i" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="fa-solid fa-file-circle-plus fs-1 mb-3 opacity-50"></i>
+                    <p class="mb-0">Aucun document déposé pour le moment.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Signature Tasks -->
+    <div class="col-12 col-lg-6">
+        <div class="card-custom p-4 h-100">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <h5 class="fw-bold mb-0">
+                    <i class="fa-solid fa-signature text-pink me-2" style="color: #ec4899;"></i>Tâches de Signature
+                </h5>
+            </div>
+
+            {% if recent_tasks %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover align-middle bg-transparent mb-0">
+                        <thead>
+                            <tr class="text-muted small border-bottom border-secondary">
+                                <th>Document</th>
+                                <th>Statut</th>
+                                <th>Reçu le</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in recent_tasks %}
+                                <tr>
+                                    <td>
+                                        <span class="fw-semibold d-block text-white">{{ task.document.title }}</span>
+                                        <span class="text-muted small">Propriétaire: {{ task.document.owner.username }}</span>
+                                    </td>
+                                    <td>
+                                        {% if task.signature_status == 'pending' %}
+                                            <span class="badge badge-status badge-pending">En attente</span>
+                                        {% elif task.signature_status == 'viewed' %}
+                                            <span class="badge badge-status badge-partially">Consulté</span>
+                                        {% elif task.signature_status == 'signed' %}
+                                            <span class="badge badge-status badge-signed">Signé</span>
+                                        {% else %}
+                                            <span class="badge badge-status badge-draft">{{ task.signature_status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted small">{{ task.created_at|date:"d/m/Y H:i" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="fa-solid fa-circle-check fs-1 mb-3 text-success opacity-50"></i>
+                    <p class="mb-0">Aucune tâche de signature en attente.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
