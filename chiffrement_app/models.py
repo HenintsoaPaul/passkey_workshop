@@ -93,9 +93,36 @@ class DocumentSigner(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return self.user.username
+        return f"{self.user.username} - {self.signature_status}"
 
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Signataire'
         verbose_name_plural = 'Signataires'
+
+
+class SignatureLog(models.Model):
+
+    ACTION_CHOICES = [
+        ('created', 'Créé'),
+        ('viewed', 'Vu'),
+        ('accepted', 'Accepté'),
+        ('signed', 'Signé'),
+        ('rejected', 'Rejeté'),
+    ]
+
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='logs')
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signature_logs')
+    details = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.action}"
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Journal de signature'
+        verbose_name_plural = 'Journaux de signature'

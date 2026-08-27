@@ -10,7 +10,7 @@ urlpatterns = [
     path('register/', views.register, name='register'),
 
     path('', views.dashboard, name='dashboard'),
-    #path('document/upload/', views.upload_document, name='upload_document'),
+    path('document/upload/', views.upload_document, name='upload_document'),
     #path('document/<int:document_id>/', views.document_detail, name='document_detail'),
     #path('document/<int:document_id>/sign/', views.sign_document, name='sign_document'),
     #path('document/<int:document_id>/download/', views.download_document, name='download_document'),

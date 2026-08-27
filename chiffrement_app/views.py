@@ -22,7 +22,6 @@ from .models import Document, DocumentSigner, UserProfile
 # ============ Authentification ============
 
 def register(request):
-    
     if request.method == 'POST':
         username = request.POST.get('username')
         email = request.POST.get('email')
@@ -103,3 +102,39 @@ def dashboard(request):
     return render(request, 'dashboard.html', context)
 
 # ======== Gestion des documents ======== 
+
+@login_required(login_url='chiffrement_app:login')
+def upload_document(request):
+    if request.method == 'POST':
+        title = request.POST.get('title')
+        description = request.POST.get('description', '')
+        file = request.FILES.get('file')
+        due_date = request.POST.get('due_date')
+        
+        if not title or not file:
+            messages.error(request, 'Titre et fichier requis.')
+            return redirect('upload_document')
+        
+        document = Document.objects.create(
+            title=title,
+            description=description,
+            file=file,
+            owner=request.user,
+            status='draft',
+            due_date=due_date if due_date else None
+        )
+        
+        SignatureLog.objects.create(
+            document=document,
+            action='created',
+            user=request.user,
+            details=f'Document "{title}" créé'
+        )
+        
+        messages.success(request, 'Document téléchargé avec succès!')
+
+        # ici je voudrais rediriger vers la page de detail du document mais pour le moment on va vers dashboard
+        return redirect('chiffrement_app:dashboard')
+        #return redirect('chiffrement_app:document_detail', document_id=document.id)
+    
+    return render(request, 'documents/upload.html')
