@@ -1,7 +1,8 @@
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth.models import User
-from chiffrement_app.models import UserProfile
+from django.core.files.uploadedfile import SimpleUploadedFile
+from chiffrement_app.models import UserProfile, Document, SignatureLog
 
 
 class AuthenticationTests(TestCase):
@@ -166,3 +167,57 @@ class AuthenticationTests(TestCase):
 
         # Vérifier que la session ne contient plus l'utilisateur connecté
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class DocumentUploadTests(TestCase):
+    """Tests unitaires pour le téléversement de documents."""
+
+    def setUp(self):
+        self.client = Client()
+        self.upload_url = reverse('chiffrement_app:upload_document')
+        self.login_url = reverse('chiffrement_app:login')
+        self.dashboard_url = reverse('chiffrement_app:dashboard')
+
+        self.user = User.objects.create_user(
+            username='uploader',
+            email='uploader@example.com',
+            password='Password123!'
+        )
+
+    def test_upload_page_requires_login(self):
+        """Vérifie qu'un utilisateur non connecté est redirigé vers la connexion."""
+        response = self.client.get(self.upload_url)
+        self.assertRedirects(response, f"{self.login_url}?next={self.upload_url}")
+
+    def test_upload_page_loads_when_authenticated(self):
+        """Vérifie que la page de téléversement s'affiche pour un utilisateur connecté."""
+        self.client.login(username='uploader', password='Password123!')
+        response = self.client.get(self.upload_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'documents/upload.html')
+
+    def test_upload_document_success(self):
+        """Vérifie le téléversement réussi d'un fichier avec création du modèle et du log."""
+        self.client.login(username='uploader', password='Password123!')
+        
+        file_content = b"Contenu de test pour la signature electronique."
+        uploaded_file = SimpleUploadedFile("contrat_test.pdf", file_content, content_type="application/pdf")
+
+        data = {
+            'title': 'Contrat de Test',
+            'description': 'Description du contrat de test',
+            'file': uploaded_file
+        }
+
+        response = self.client.post(self.upload_url, data)
+        self.assertRedirects(response, self.dashboard_url)
+
+        # Vérification en BDD
+        self.assertTrue(Document.objects.filter(title='Contrat de Test', owner=self.user).exists())
+        doc = Document.objects.get(title='Contrat de Test')
+        self.assertEqual(doc.status, 'draft')
+        self.assertIsNotNone(doc.file_hash)
+        self.assertGreater(len(doc.file_hash), 0)
+
+        # Vérification du log d'audit
+        self.assertTrue(SignatureLog.objects.filter(document=doc, action='created', user=self.user).exists())

@@ -17,7 +17,7 @@ import hashlib
 import json
 from datetime import timedelta
 
-from .models import Document, DocumentSigner, UserProfile
+from .models import Document, DocumentSigner, UserProfile, SignatureLog
 
 # ============ Authentification ============
 
@@ -113,7 +113,7 @@ def upload_document(request):
         
         if not title or not file:
             messages.error(request, 'Titre et fichier requis.')
-            return redirect('upload_document')
+            return redirect('chiffrement_app:upload_document')
         
         document = Document.objects.create(
             title=title,
