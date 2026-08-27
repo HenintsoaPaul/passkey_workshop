@@ -14,7 +14,7 @@ class Document(models.Model):
         ('archived', 'Archivé'),
     ]
 
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     file = models.FileField(upload_to='documents/%Y/%m/%d/')
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='documents')

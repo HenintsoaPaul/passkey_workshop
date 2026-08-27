@@ -114,6 +114,10 @@ def upload_document(request):
         if not title or not file:
             messages.error(request, 'Titre et fichier requis.')
             return redirect('chiffrement_app:upload_document')
+
+        if Document.objects.filter(title=title).exists():
+            messages.error(request, 'Un document avec ce titre existe déjà.')
+            return render(request, 'documents/upload.html', {'error': 'Un document avec ce titre existe déjà.'})
         
         document = Document.objects.create(
             title=title,
