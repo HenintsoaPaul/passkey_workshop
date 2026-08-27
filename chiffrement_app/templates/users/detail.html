@@ -8,15 +8,9 @@
         <div class="card-custom p-4 p-md-5">
             <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
                 <div class="d-flex align-items-center gap-3">
-                    {% if profile.avatar %}
-                        <img src="{{ profile.avatar.url }}" alt="Avatar" class="rounded-circle" style="width: 64px; height: 64px; object-fit: cover; border: 2px solid var(--token-accent-indigo);">
-                    {% elif profile.profile_picture %}
-                        <img src="{{ profile.profile_picture.url }}" alt="Photo" class="rounded-circle" style="width: 64px; height: 64px; object-fit: cover; border: 2px solid var(--token-accent-indigo);">
-                    {% else %}
-                        <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold fs-3" style="width: 64px; height: 64px; background: linear-gradient(135deg, var(--token-primary) 0%, var(--token-secondary) 100%);">
-                            {{ target_user.username|slice:":1"|upper }}
-                        </div>
-                    {% endif %}
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold fs-3" style="width: 64px; height: 64px; background: linear-gradient(135deg, var(--token-primary) 0%, var(--token-secondary) 100%); border: 2px solid var(--token-accent-indigo);">
+                        {{ target_user.username|slice:":1"|upper }}
+                    </div>
                     <div>
                         <h2 class="h3 fw-bold mb-1 text-white">{{ profile.name|default:target_user.username }}</h2>
                         <span class="badge px-3 py-1 rounded-pill" style="background: rgba(165, 180, 252, 0.18); color: var(--token-accent-indigo); border: 1px solid rgba(165, 180, 252, 0.3);">

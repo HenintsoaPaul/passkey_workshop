@@ -65,18 +65,10 @@
                     <textarea class="form-control form-control-custom" id="bio" name="bio" rows="3">{{ profile.bio|default:'' }}</textarea>
                 </div>
 
-                <div class="row mb-4">
-                    <div class="col-md-6 mb-3 mb-md-0">
-                        <label for="avatar" class="form-label">Photo de profil / Avatar</label>
-                        <input type="file" class="form-control form-control-custom mb-1" id="avatar" name="avatar" accept="image/*">
-                        <span class="text-token-muted small d-block">Format recommandé: PNG, JPG</span>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label for="signature_image" class="form-label">Image de Signature Numérique</label>
-                        <input type="file" class="form-control form-control-custom mb-1" id="signature_image" name="signature_image" accept="image/*">
-                        <span class="text-token-muted small d-block">Image scannée de votre manuscrit (Fond transparent recommandé)</span>
-                    </div>
+                <div class="mb-4">
+                    <label for="signature_image" class="form-label">Image de Signature Numérique</label>
+                    <input type="file" class="form-control form-control-custom mb-1" id="signature_image" name="signature_image" accept="image/*">
+                    <span class="text-token-muted small d-block">Image scannée de votre manuscrit (Fond transparent recommandé)</span>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-end gap-3 pt-3 border-top" style="border-color: var(--token-border) !important;">

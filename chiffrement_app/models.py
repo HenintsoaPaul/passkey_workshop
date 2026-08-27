@@ -57,9 +57,12 @@ class UserProfile(models.Model):
     name = models.CharField(max_length=255, null=False)
     email = models.EmailField(null=False)
     phone = models.CharField(max_length=20, blank=True, null=True)
+    organization = models.CharField(max_length=255, blank=True, null=True)
+    job_title = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
-    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    signature_image = models.ImageField(upload_to='signatures/', blank=True, null=True)
+    bio = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
