@@ -475,7 +475,7 @@ def assetlinks(request):
             ],
             'target': {
                 'namespace': 'android_app',
-                'package_name': 'com.example.passkey_flutter',
+                'package_name': 'com.example.passkey_app',
                 'sha256_cert_fingerprints': [
                     'D7:01:81:94:BD:76:DD:F8:9D:36:77:6F:F4:AA:8E:37:7B:EF:7B:D4:20:C7:9A:B1:24:44:9E:48:C9:3F:AC:9B'
                 ],

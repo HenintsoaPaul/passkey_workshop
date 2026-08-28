@@ -26,8 +26,6 @@ SECRET_KEY = 'django-insecure-f9(4b)b&x79@_91rj7*dpkj=k492+7r0e18lk_@xt8(hh@^awm
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -135,3 +133,7 @@ _config = configparser.ConfigParser()
 _config.read(BASE_DIR / 'config.ini')
 
 PASSKEY_HOST = _config.get('passkey', 'host', fallback='localhost:8000')
+
+ALLOWED_HOSTS = [
+    PASSKEY_HOST
+]
