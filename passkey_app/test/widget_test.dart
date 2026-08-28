@@ -9,10 +9,14 @@ import 'package:passkey_app/screens/auth_screen.dart';
 import 'package:passkey_app/session/app_session.dart';
 import 'package:passkey_app/theme/app_theme.dart';
 
+import 'support/test_coordinator.dart';
+
 void main() {
   testWidgets('AuthScreen renders the username field and both passkey actions',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      const MyApp(repository: MockDocumentRepository()),
+    );
 
     expect(find.text('SignApp Passkey'), findsOneWidget);
     expect(find.text("NOM D'UTILISATEUR"), findsOneWidget);
@@ -25,7 +29,9 @@ void main() {
 
   testWidgets('AuthScreen rejects an empty username without calling the API',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      const MyApp(repository: MockDocumentRepository()),
+    );
 
     await tester.tap(find.text('Se connecter avec une passkey'));
     await tester.pump();
@@ -39,7 +45,9 @@ void main() {
 
   testWidgets('The logs sheet opens and reports that it is empty',
       (WidgetTester tester) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(
+      const MyApp(repository: MockDocumentRepository()),
+    );
 
     await tester.tap(find.text('Voir les journaux'));
     await tester.pumpAndSettle();
@@ -61,6 +69,7 @@ void main() {
               ? AppShell(
                   session: session,
                   repository: const MockDocumentRepository(),
+                  coordinator: buildTestCoordinator(),
                 )
               : AuthScreen(
                   passkeyService: PasskeyService(),

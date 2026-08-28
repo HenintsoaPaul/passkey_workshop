@@ -6,6 +6,8 @@ import 'package:passkey_app/screens/app_shell.dart';
 import 'package:passkey_app/session/app_session.dart';
 import 'package:passkey_app/theme/app_theme.dart';
 
+import 'support/test_coordinator.dart';
+
 Future<void> pumpShell(WidgetTester tester, AppSession session) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -13,6 +15,7 @@ Future<void> pumpShell(WidgetTester tester, AppSession session) async {
       home: AppShell(
         session: session,
         repository: const MockDocumentRepository(),
+        coordinator: buildTestCoordinator(),
       ),
     ),
   );
@@ -76,13 +79,15 @@ void main() {
     await pumpShell(tester, AppSession()..signIn('henintsoa'));
 
     final documents = await const MockDocumentRepository().fetchDocuments();
-    final pending =
-        documents.where((d) => d.status.name == 'pending').length;
+
+    // "En Attente" counts what this user can still sign, not every document
+    // that happens to be unfinished.
+    final awaiting = documents.where((d) => d.canSign).length;
 
     expect(find.text('Mes Documents'), findsOneWidget);
     expect(find.text('En Attente'), findsOneWidget);
     expect(find.text('${documents.length}'), findsOneWidget);
-    expect(find.text('$pending'), findsOneWidget);
+    expect(find.text('$awaiting'), findsOneWidget);
   });
 
   testWidgets('the documents search filters the list',

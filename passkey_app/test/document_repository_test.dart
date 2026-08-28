@@ -2,23 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:passkey_app/data/document_repository.dart';
 import 'package:passkey_app/models/document.dart';
+import 'package:passkey_app/models/verification.dart';
 
 void main() {
   const repository = MockDocumentRepository();
 
   group('MockDocumentRepository', () {
-    test('serves the three documents the dashboard counters assume', () async {
-      final documents = await repository.fetchDocuments();
-
-      expect(documents, hasLength(3));
-
-      final pending = documents
-          .where((d) => d.status == DocumentStatus.pending)
-          .length;
-
-      expect(pending, 1);
-    });
-
     test('covers every status so each badge style is exercised', () async {
       final documents = await repository.fetchDocuments();
       final statuses = documents.map((d) => d.status).toSet();
@@ -53,12 +42,52 @@ void main() {
       }
     });
 
+    test('a signed document never also offers to be signed', () async {
+      final documents = await repository.fetchDocuments();
+
+      for (final document in documents) {
+        expect(
+          document.hasSigned && document.canSign,
+          isFalse,
+          reason: document.title,
+        );
+      }
+    });
+
     test('fetchDocument resolves by id and returns null otherwise', () async {
       final documents = await repository.fetchDocuments();
       final first = documents.first;
 
       expect((await repository.fetchDocument(first.id))?.title, first.title);
       expect(await repository.fetchDocument('does-not-exist'), isNull);
+    });
+
+    test('verification reports a valid verdict only for a signed document',
+        () async {
+      final documents = await repository.fetchDocuments();
+
+      final signed = documents.firstWhere(
+        (d) => d.status == DocumentStatus.fullySigned,
+      );
+      final pending = documents.firstWhere(
+        (d) => d.status == DocumentStatus.pending,
+      );
+
+      expect(
+        (await repository.fetchVerification(signed.id)).verdict,
+        VerificationVerdict.valid,
+      );
+      expect(
+        (await repository.fetchVerification(pending.id)).verdict,
+        VerificationVerdict.incomplete,
+      );
+    });
+
+    test('signing is not faked: it needs a real server', () async {
+      expect(
+        () => repository.requestSignChallenge('1', 'a' * 64),
+        throwsUnsupportedError,
+      );
     });
   });
 
@@ -67,7 +96,7 @@ void main() {
       final documents = await repository.fetchDocuments();
 
       final signed = documents.firstWhere(
-        (d) => d.status == DocumentStatus.signed,
+        (d) => d.status == DocumentStatus.fullySigned,
       );
 
       expect(signed.signedCount, signed.signers.length);
@@ -79,6 +108,17 @@ void main() {
 
       expect(pending.signedCount, 0);
       expect(pending.signatureProgress, 0.0);
+    });
+
+    test('a partially signed document sits between the two', () async {
+      final documents = await repository.fetchDocuments();
+
+      final partial = documents.firstWhere(
+        (d) => d.status == DocumentStatus.partiallySigned,
+      );
+
+      expect(partial.signatureProgress, greaterThan(0));
+      expect(partial.signatureProgress, lessThan(1));
     });
 
     test('shortHash abbreviates the digest the way the mockups show', () async {
