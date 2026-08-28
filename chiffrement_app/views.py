@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 import hashlib
 import json
 import uuid
@@ -457,9 +458,9 @@ def user_detail(request, user_id):
 
 # ============ Passkeys ============
 
-RP_ID = 'socks-aspects-cinema-continue.trycloudflare.com'
+RP_ID = settings.PASSKEY_HOST
 RP_NAME = 'Flutter Passkey POC'
-ORIGIN = 'https://socks-aspects-cinema-continue.trycloudflare.com'
+ORIGIN = f'https://{settings.PASSKEY_HOST}'
 EXPECTED_ORIGINS = [
     'android:apk-key-hash:1wGBlL123fidNndv9KqON3vve9Qgx5qxJESeSMk_rJs'
 ]

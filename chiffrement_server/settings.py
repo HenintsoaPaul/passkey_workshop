@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+import configparser
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -127,3 +128,10 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [],
     'DEFAULT_PERMISSION_CLASSES': [],
 }
+
+# Passkey host, read from config.ini so it can be changed without touching code
+# (e.g. whenever the dev tunnel URL rotates).
+_config = configparser.ConfigParser()
+_config.read(BASE_DIR / 'config.ini')
+
+PASSKEY_HOST = _config.get('passkey', 'host', fallback='localhost:8000')
