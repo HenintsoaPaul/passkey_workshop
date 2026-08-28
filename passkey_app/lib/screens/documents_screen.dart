@@ -1,35 +1,40 @@
 import 'package:flutter/material.dart';
 
 import '../data/document_repository.dart';
+import '../data/signing_coordinator.dart';
 import '../models/document.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../utils/date_format.dart';
-import '../utils/placeholders.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_top_bar.dart';
-import '../widgets/circle_icon_button.dart';
 import '../widgets/status_badge.dart';
 import 'document_detail_screen.dart';
 
-/// Searchable list of the signed-in user's documents.
+/// Searchable list of the documents assigned to the signed-in user.
 class DocumentsScreen extends StatefulWidget {
-  const DocumentsScreen({super.key, required this.repository});
+  const DocumentsScreen({
+    super.key,
+    required this.repository,
+    required this.coordinator,
+    this.onDocumentSigned,
+  });
 
   final DocumentRepository repository;
+  final SigningCoordinator coordinator;
+
+  /// Lets the shell refresh its other tabs when a signature lands here.
+  final VoidCallback? onDocumentSigned;
 
   @override
-  State<DocumentsScreen> createState() => _DocumentsScreenState();
+  State<DocumentsScreen> createState() => DocumentsScreenState();
 }
 
-class _DocumentsScreenState extends State<DocumentsScreen> {
+class DocumentsScreenState extends State<DocumentsScreen> {
   final _searchController = TextEditingController();
 
-  // TODO(api): served by MockDocumentRepository until Django exposes a
-  // documents JSON API.
-  late final Future<List<Document>> _documents =
-      widget.repository.fetchDocuments();
+  late Future<List<Document>> _documents = widget.repository.fetchDocuments();
 
   String _query = '';
 
@@ -37,6 +42,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> reload() async {
+    setState(() => _documents = widget.repository.fetchDocuments());
+
+    // Callers fire this without awaiting, so a failure is reported through the
+    // FutureBuilder rather than escaping as an unhandled error.
+    await _documents.catchError((Object _) => <Document>[]);
   }
 
   List<Document> _filter(List<Document> documents) {
@@ -52,6 +65,22 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     }).toList();
   }
 
+  Future<void> _open(Document document) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => DocumentDetailScreen(
+          document: document,
+          repository: widget.repository,
+          coordinator: widget.coordinator,
+          onChanged: () {
+            reload();
+            widget.onDocumentSigned?.call();
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -59,37 +88,47 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       body: FutureBuilder<List<Document>>(
         future: _documents,
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return _LoadFailure(error: '${snapshot.error}', onRetry: reload);
+          }
+
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final documents = _filter(snapshot.data!);
 
-          return ListView(
-            padding: const EdgeInsets.all(AppSpacing.pageMargin),
-            children: [
-              _SearchField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _query = value),
-              ),
+          return RefreshIndicator(
+            onRefresh: reload,
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.pageMargin),
+              children: [
+                _SearchField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                ),
 
-              const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.lg),
 
-              const Text(
-                'Documents récents',
-                style: AppTypography.headlineSm,
-              ),
+                const Text(
+                  'Documents récents',
+                  style: AppTypography.headlineSm,
+                ),
 
-              const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.md),
 
-              if (documents.isEmpty)
-                const _EmptyResults()
-              else
-                for (final document in documents) ...[
-                  _DocumentCard(document: document),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-            ],
+                if (documents.isEmpty)
+                  _EmptyResults(hasQuery: _query.isNotEmpty)
+                else
+                  for (final document in documents) ...[
+                    _DocumentCard(
+                      document: document,
+                      onTap: () => _open(document),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+              ],
+            ),
           );
         },
       ),
@@ -123,22 +162,26 @@ class _SearchField extends StatelessWidget {
 }
 
 class _EmptyResults extends StatelessWidget {
-  const _EmptyResults();
+  const _EmptyResults({required this.hasQuery});
+
+  final bool hasQuery;
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
       child: Column(
         children: [
           Icon(
-            Icons.search_off,
+            hasQuery ? Icons.search_off : Icons.folder_off,
             size: 32,
             color: AppColors.outline,
           ),
-          SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.sm),
           Text(
-            'Aucun document ne correspond à cette recherche.',
+            hasQuery
+                ? 'Aucun document ne correspond à cette recherche.'
+                : "Aucun document ne vous est affecté pour l'instant.",
             textAlign: TextAlign.center,
             style: AppTypography.bodyMd,
           ),
@@ -148,19 +191,56 @@ class _EmptyResults extends StatelessWidget {
   }
 }
 
+class _LoadFailure extends StatelessWidget {
+  const _LoadFailure({required this.error, required this.onRetry});
+
+  final String error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.pageMargin),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off, size: 32, color: AppColors.outline),
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              'Impossible de charger vos documents.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyMd,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              error,
+              textAlign: TextAlign.center,
+              style: AppTypography.labelSm.copyWith(color: AppColors.outline),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Réessayer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DocumentCard extends StatelessWidget {
-  const _DocumentCard({required this.document});
+  const _DocumentCard({required this.document, required this.onTap});
 
   final Document document;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (context) => DocumentDetailScreen(document: document),
-        ),
-      ),
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -197,7 +277,6 @@ class _DocumentCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
 
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Text(
@@ -205,42 +284,29 @@ class _DocumentCard extends StatelessWidget {
                   style: AppTypography.labelMd,
                 ),
               ),
-              ..._actionsFor(context, document),
+
+              // The signature count says more here than a row of icon buttons
+              // whose actions live on the web side.
+              Text(
+                '${document.signedCount}/${document.signers.length} signé(s)',
+                style: AppTypography.labelMd.copyWith(
+                  color: document.canSign
+                      ? AppColors.primary
+                      : AppColors.onSurfaceVariant,
+                ),
+              ),
+
+              const SizedBox(width: AppSpacing.xs),
+
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.onSurfaceVariant,
+              ),
             ],
           ),
         ],
       ),
     );
-  }
-
-  /// Draft documents offer editing; the rest offer history and download,
-  /// matching the mockup.
-  List<Widget> _actionsFor(BuildContext context, Document document) {
-    if (document.status == DocumentStatus.draft) {
-      return [
-        CircleIconButton(
-          icon: Icons.edit,
-          tooltip: 'Modifier',
-          filled: true,
-          onPressed: () => showComingSoon(context, 'Modification'),
-        ),
-      ];
-    }
-
-    return [
-      CircleIconButton(
-        icon: Icons.history,
-        tooltip: 'Historique',
-        filled: true,
-        onPressed: () => showComingSoon(context, 'Historique'),
-      ),
-      const SizedBox(width: AppSpacing.sm),
-      CircleIconButton(
-        icon: Icons.download,
-        tooltip: 'Télécharger',
-        filled: true,
-        onPressed: () => showComingSoon(context, 'Téléchargement'),
-      ),
-    ];
   }
 }

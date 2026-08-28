@@ -21,10 +21,15 @@ class AuthScreen extends StatefulWidget {
     super.key,
     required this.passkeyService,
     required this.session,
+    this.onSignedIn,
   });
 
   final PasskeyService passkeyService;
   final AppSession session;
+
+  /// Runs once the session is established, to register the device's signing
+  /// key before the user reaches a document.
+  final VoidCallback? onSignedIn;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -132,6 +137,7 @@ class _AuthScreenState extends State<AuthScreen> {
       widget.session.addLog('Login successful for $username');
 
       widget.session.signIn(username);
+      widget.onSignedIn?.call();
     } catch (e) {
       widget.session.addLog('Login error: $e');
       _setMessage('Échec de la connexion.', isError: true);

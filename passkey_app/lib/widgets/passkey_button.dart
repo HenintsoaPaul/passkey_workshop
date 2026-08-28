@@ -31,7 +31,10 @@ class PasskeyButton extends StatelessWidget {
 
   final String label;
   final IconData icon;
-  final VoidCallback onPressed;
+
+  /// Null disables the button, alongside [busy] and [enabled].
+  final VoidCallback? onPressed;
+
   final bool busy;
   final bool enabled;
   final bool _outlined;

@@ -39,4 +39,8 @@ class AppColors {
   static const statusWaiting = Color(0xFFF59E0B);
   static const statusSigned = Color(0xFF10B981);
   static const statusDraft = Color(0xFF64748B);
+
+  /// Partially signed: between waiting amber and signed green, and distinct
+  /// from both so a half-signed document is never mistaken for either.
+  static const statusPartial = Color(0xFF38BDF8);
 }
