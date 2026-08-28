@@ -311,6 +311,28 @@ friction. La clé reste non exportable dans les deux cas.
 La clé privée n'est jamais transmise : `POST /api/keys/` refuse explicitement
 tout PEM contenant `PRIVATE KEY`, et des tests le vérifient des deux côtés.
 
+### Versions (§2.5)
+
+Le fichier n'appartient pas au document mais à une `DocumentVersion` :
+
+```
+Document          titre, propriétaire, statut, signataires
+  └── versions    v1, v2, v3…  (fichier + SHA-256 + qui l'a déposée)
+        └── signatures        rattachées à la version qu'elles couvrent
+```
+
+Déposer un nouveau contenu (`POST /document/<id>/version/`) crée une version,
+remet tous les signataires en attente et fait retomber le document en
+`pending`. Rien n'est écrasé : l'ancienne version et ses signatures restent en
+base, toujours vérifiables pour les octets qu'elles couvraient — elles ne
+comptent simplement plus pour la version courante.
+
+`Document.file`, `.file_hash`, `.file_size` et `.mime_type` restent lisibles :
+ce sont des propriétés qui délèguent à la version courante. L'empreinte est
+calculée une seule fois, à la création de la version ; l'ancien
+`Document.save()` relisait tout le fichier à chaque sauvegarde, y compris pour
+un simple changement de statut.
+
 ### Vérification globale (§2.5)
 
 `chiffrement_app.services` est la source unique de vérité, partagée par l'API
@@ -327,6 +349,30 @@ mobile et les vues web :
 > statut sans aucune cryptographie derrière, ce qui faisait diverger l'état du
 > document et son rapport de vérification. `sign_document` renvoie désormais
 > vers l'application mobile.
+
+### Périmètre de l'application web
+
+« Les documents signés et les signatures électroniques doivent être visibles
+uniquement dans l'application mobile. »
+
+| L'application web | L'application mobile |
+|-------------------|----------------------|
+| Créer et gérer les comptes | S'authentifier par passkey |
+| Déposer un document, déposer une version | Consulter les documents affectés |
+| Affecter des signataires | Signer (passkey + clé privée RSA) |
+| Suivre l'état, consulter le journal | Voir les autres signatures |
+| Lancer la vérification et lire le verdict | Vérifier document et signatures |
+| — | **Seule à accéder au fichier et aux valeurs de signature** |
+
+Concrètement : `MEDIA_URL` n'est volontairement pas branché sur `urlpatterns`,
+le fichier n'est servi que par `GET /api/documents/<id>/file/` après
+vérification du droit d'accès, et aucun gabarit web ne rend
+`Signature.signature_value`. Des tests le vérifient
+(`chiffrement_app/tests/test_web_scope.py`).
+
+Un administrateur peut créer un compte signataire
+(`/chiffrement_app/users/create/`) ; la fiche utilisateur montre ses passkeys
+et l'empreinte de ses clés publiques, jamais la partie privée.
 
 ## 🛠️ Configuration Avancée
 
