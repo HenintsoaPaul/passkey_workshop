@@ -120,7 +120,6 @@ signature_project/
 - organization (CharField): Organisation
 - job_title (CharField): Fonction
 - avatar (ImageField): Photo de profil
-- signature_image (ImageField): Signature numérique
 - bio (TextField): Biographie
 - created_at, updated_at (DateTimeField): Timestamps
 ```

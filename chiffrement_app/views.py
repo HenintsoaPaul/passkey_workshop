@@ -420,9 +420,6 @@ def profile_edit(request):
         address = request.POST.get('address')
         city = request.POST.get('city')
         bio = request.POST.get('bio')
-        
-        if 'signature_image' in request.FILES:
-            profile.signature_image = request.FILES['signature_image']
             
         profile.name = name or profile.name
         profile.email = email or profile.email
