@@ -162,3 +162,23 @@ class PasskeyLoginTests(TestCase):
 
         self.assertNotIn('authentication_challenge', self.client.session)
         self.assertNotIn('authentication_user', self.client.session)
+
+    @patch('chiffrement_app.views.verify_authentication_response')
+    def test_login_verify_opens_a_session_for_the_api(self, mock_verify):
+        """La connexion par passkey doit ouvrir une vraie session Django.
+
+        Sans cela le client mobile repart avec un cookie de session anonyme et
+        chaque appel à /api/ répond 401.
+        """
+        mock_verify.return_value = Mock(new_sign_count=6)
+
+        self.post_json(self.options_url, {'username': 'bob'})
+
+        raw_id = base64.urlsafe_b64encode(b'cred-xyz').decode().rstrip('=')
+        self.post_json(self.verify_url, {'credential': {'rawId': raw_id}})
+
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.id)
+
+        response = self.client.get(reverse('api:me'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['username'], 'bob')
