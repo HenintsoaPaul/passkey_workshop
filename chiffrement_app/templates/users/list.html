@@ -6,6 +6,11 @@
 <div class="row mb-4 align-items-center">
     <div class="col-md-7">
         <h1 class="h3 fw-bold mb-1 text-white">Annuaire des Signataires</h1>
+                {% if user.is_staff %}
+                    <a href="{% url 'chiffrement_app:user_create' %}" class="btn btn-sm btn-gradient-primary ms-3">
+                        <i class="fa-solid fa-user-plus me-1"></i>Créer un utilisateur
+                    </a>
+                {% endif %}
         <p class="text-token-muted mb-0">Consultez et recherchez les utilisateurs et signataires enregistrés sur la plateforme.</p>
     </div>
     <div class="col-md-5 mt-3 mt-md-0">

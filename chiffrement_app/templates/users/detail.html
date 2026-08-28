@@ -87,4 +87,47 @@
         </div>
     </div>
 </div>
+
+    <!-- Registered credentials: public halves only -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-12 col-lg-10">
+            <div class="card-custom p-4">
+                <h5 class="fw-bold text-white mb-3">
+                    <i class="fa-solid fa-key me-2" style="color: var(--token-accent-indigo);"></i>Identifiants enregistrés
+                </h5>
+
+                <div class="p-3 border rounded-3 mb-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                    <span class="text-token-muted small d-block mb-1">Passkeys</span>
+                    <span class="text-white">{{ passkey_count }} enregistrée(s)</span>
+                </div>
+
+                <span class="text-token-muted small d-block mb-2">Clés de signature RSA (partie publique)</span>
+                <div class="list-group">
+                    {% for key in signing_keys %}
+                        <div class="list-group-item text-white p-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <span class="fw-bold">{{ key.algorithm }}</span>
+                                {% if key.revoked_at %}
+                                    <span class="badge badge-status badge-pending">Révoquée le {{ key.revoked_at|date:"d/m/Y" }}</span>
+                                {% else %}
+                                    <span class="badge badge-status badge-signed">Active</span>
+                                {% endif %}
+                            </div>
+                            <code class="text-token-accent small d-block text-break mt-2">{{ key.fingerprint }}</code>
+                            <span class="text-token-muted small d-block mt-1">Enregistrée le {{ key.created_at|date:"d/m/Y H:i" }}</span>
+                        </div>
+                    {% empty %}
+                        <div class="list-group-item text-token-muted text-center py-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                            Aucune clé de signature. Cet utilisateur ne peut pas encore signer.
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <p class="text-token-muted small mb-0 mt-3">
+                    La clé privée correspondante ne quitte jamais le téléphone de
+                    l'utilisateur et n'est donc jamais visible ici.
+                </p>
+            </div>
+        </div>
+    </div>
 {% endblock %}
