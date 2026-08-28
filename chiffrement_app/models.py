@@ -194,11 +194,15 @@ class DocumentSigner(models.Model):
 class SignatureLog(models.Model):
 
     ACTION_CHOICES = [
-        ('created', 'Créé'),
-        ('viewed', 'Vu'),
+        ('created', 'Document créé'),
+        ('viewed', 'Document consulté'),
+        ('assigned', 'Signataire affecté'),
+        ('unassigned', 'Signataire retiré'),
+        ('version_added', 'Nouvelle version déposée'),
         ('accepted', 'Accepté'),
-        ('signed', 'Signé'),
+        ('signed', 'Document signé'),
         ('rejected', 'Rejeté'),
+        ('archived', 'Document archivé'),
     ]
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='logs')

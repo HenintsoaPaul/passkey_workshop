@@ -65,7 +65,9 @@ def add_version(document, file, user, log_details=None):
 
     SignatureLog.objects.create(
         document=document,
-        action='created',
+        # Version 1 is the document being created; anything after it is a
+        # revision that invalidated what came before.
+        action='created' if previous is None else 'version_added',
         user=user,
         details=log_details
         or f'Version {next_number} déposée : les signatures précédentes ne '

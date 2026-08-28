@@ -658,3 +658,57 @@ class VerificationTests(ApiTestCase):
         alice_report = [s for s in data['signatures'] if s['signer'] == 'alice'][0]
         self.assertFalse(alice_report['isValid'])
         self.assertIn('révoquée', alice_report['reason'])
+
+
+class AuditTrailTests(ApiTestCase):
+    """Le journal doit raconter le parcours mobile, pas seulement le web."""
+
+    def test_the_list_omits_the_trail_and_the_detail_carries_it(self):
+        self.client.force_login(self.alice)
+
+        listed = self.client.get(self.url('document_list')).json()['documents'][0]
+        detail = self.client.get(self.doc_url('document_detail')).json()
+
+        # Dead weight on every card, essential on the one being read.
+        self.assertEqual(listed['auditTrail'], [])
+        self.assertNotEqual(detail['auditTrail'], [])
+
+    def test_opening_a_document_on_mobile_is_recorded(self):
+        self.client.force_login(self.alice)
+
+        self.client.get(self.doc_url('document_detail'))
+
+        log = self.document.logs.filter(action='viewed', user=self.alice).first()
+        self.assertIsNotNone(log)
+        self.assertIn('mobile', log.details)
+
+        signer = DocumentSigner.objects.get(document=self.document, user=self.alice)
+        self.assertEqual(signer.signature_status, 'viewed')
+
+    def test_refetching_does_not_flood_the_trail(self):
+        """Le téléphone recharge à chaque ouverture et après chaque signature."""
+        self.client.force_login(self.alice)
+
+        for _ in range(4):
+            self.client.get(self.doc_url('document_detail'))
+
+        self.assertEqual(
+            self.document.logs.filter(action='viewed', user=self.alice).count(), 1
+        )
+
+    def test_an_owner_who_is_not_a_signer_is_not_logged_as_one(self):
+        self.client.force_login(self.owner)
+
+        self.client.get(self.doc_url('document_detail'))
+
+        self.assertFalse(self.document.logs.filter(action='viewed').exists())
+
+    def test_the_trail_reaches_the_client_with_a_readable_title(self):
+        self.client.force_login(self.alice)
+
+        entries = self.client.get(self.doc_url('document_detail')).json()['auditTrail']
+        creation = [e for e in entries if e['action'] == 'created'][0]
+
+        self.assertEqual(creation['title'], 'Document créé')
+        self.assertEqual(creation['actor'], 'Olivier Owner')
+        self.assertIn('timestamp', creation)

@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from chiffrement_app.models import (
     Document,
+    SignatureLog,
     DocumentSigner,
     DocumentVersion,
     Signature,
@@ -407,3 +408,40 @@ class VersionTests(ServiceTestCase):
 
         self.assertFalse(checks['same_version']['passed'])
         self.assertEqual(report['verdict'], 'invalid')
+
+
+class AuditVocabularyTests(ServiceTestCase):
+    """Chaque évènement doit porter son propre nom, pas « Créé » pour tout."""
+
+    def new_file(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile('c2.txt', b'Contenu revise.', 'text/plain')
+
+    def test_creating_a_document_logs_a_creation(self):
+        self.assertTrue(self.document.logs.filter(action='created').exists())
+
+    def test_a_later_version_is_not_logged_as_a_creation(self):
+        add_version(self.document, self.new_file(), self.owner)
+
+        self.assertEqual(self.document.logs.filter(action='created').count(), 1)
+        self.assertTrue(self.document.logs.filter(action='version_added').exists())
+
+    def test_signing_logs_a_signature(self):
+        self.add_signer(self.alice)
+        mark_signer_signed(self.document, self.alice)
+
+        self.assertTrue(
+            self.document.logs.filter(action='signed', user=self.alice).exists()
+        )
+
+    def test_every_recorded_action_has_a_label(self):
+        """Un code non déclaré s'afficherait tel quel dans le journal mobile."""
+        declared = {code for code, _ in SignatureLog.ACTION_CHOICES}
+
+        add_version(self.document, self.new_file(), self.owner)
+        self.add_signer(self.alice)
+        mark_signer_signed(self.document, self.alice)
+
+        used = set(self.document.logs.values_list('action', flat=True))
+        self.assertTrue(used)
+        self.assertTrue(used <= declared, f'non déclaré : {used - declared}')

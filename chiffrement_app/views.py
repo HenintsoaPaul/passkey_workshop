@@ -169,7 +169,7 @@ def upload_document(request):
                 )
                 SignatureLog.objects.create(
                     document=document,
-                    action='created',
+                    action='assigned',
                     user=request.user,
                     details=f'Signataire {signer_user.username} affecté au document'
                 )
@@ -264,7 +264,7 @@ def assign_signers(request, document_id):
                 )
                 SignatureLog.objects.create(
                     document=document,
-                    action='created',
+                    action='assigned',
                     user=request.user,
                     details=f'Signataire {s_user.username} affecté au document'
                 )
@@ -275,7 +275,7 @@ def assign_signers(request, document_id):
                 existing.delete()
                 SignatureLog.objects.create(
                     document=document,
-                    action='created',
+                    action='unassigned',
                     user=request.user,
                     details=f'Signataire {existing.user.username} retiré du document'
                 )
@@ -376,7 +376,7 @@ def archive_document(request, document_id):
     
     SignatureLog.objects.create(
         document=document,
-        action='created',
+        action='archived',
         user=request.user,
         details=f'Document archivé par {request.user.username}'
     )

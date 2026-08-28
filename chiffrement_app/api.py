@@ -41,6 +41,7 @@ from .models import (
     DocumentSigner,
     Passkey,
     Signature,
+    SignatureLog,
     SigningChallenge,
     SigningKey,
 )
@@ -400,7 +401,40 @@ def document_list(request):
 def document_detail(request, document_id):
     document = get_visible_document(request.user, document_id)
 
+    record_first_view(document, request.user)
+
     return JsonResponse(serialize_document(document, request.user, include_audit=True))
+
+
+def record_first_view(document, user):
+    """Log that a signer opened the document — §2.4 step 1.
+
+    Only the first time, on the same transition the web view uses: the phone
+    refetches this endpoint on every open, every pull-to-refresh and after
+    each signature, and logging all of those would bury the trail in noise.
+
+    Without this the audit trail knew nothing about the mobile journey, even
+    though that is where signing actually happens.
+    """
+    signer = DocumentSigner.objects.filter(
+        document=document, user=user, signature_status='pending'
+    ).first()
+
+    if signer is None:
+        return
+
+    signer.signature_status = 'viewed'
+    signer.save(update_fields=['signature_status', 'updated_at'])
+
+    SignatureLog.objects.create(
+        document=document,
+        action='viewed',
+        user=user,
+        details=(
+            f'Document consulté depuis l\'application mobile par '
+            f'{display_name(user)}'
+        ),
+    )
 
 
 @endpoint('GET')
