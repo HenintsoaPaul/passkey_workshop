@@ -7,20 +7,13 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.db.models import Q
-from django.http import JsonResponse, FileResponse
-from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-import hashlib
 import json
 import uuid
 import base64
-from datetime import timedelta
 
 from webauthn import (
     generate_registration_options,
@@ -39,6 +32,7 @@ from webauthn.helpers.structs import (
 )
 
 from .models import Document, DocumentSigner, UserProfile, SignatureLog, Passkey
+from .services import recompute_document_status, verify_document as run_verification
 
 # ============ Authentification ============
 
@@ -265,18 +259,10 @@ def assign_signers(request, document_id):
                     details=f'Signataire {existing.user.username} retiré du document'
                 )
                 
-        # Update document status
-        updated_signers = DocumentSigner.objects.filter(document=document)
-        if updated_signers.exists():
-            signed_c = updated_signers.filter(signature_status='signed').count()
-            if signed_c == updated_signers.count():
-                document.status = 'fully_signed'
-            elif signed_c > 0:
-                document.status = 'partially_signed'
-            else:
-                document.status = 'pending'
-            document.save()
-            
+        # Derived centrally, from the signatures actually recorded, so this
+        # view and the API can never disagree about a document's state.
+        recompute_document_status(document)
+
         messages.success(request, 'Signataires mis à jour avec succès.')
         
     return redirect('chiffrement_app:document_detail', document_id=document.id)
@@ -284,61 +270,45 @@ def assign_signers(request, document_id):
 
 @login_required(login_url='chiffrement_app:login')
 def sign_document(request, document_id):
+    """Signing is not possible from a browser, and says so.
+
+    A signature requires the RSA private key, which never leaves the phone,
+    and a fresh passkey confirmation (§2.1–§2.4). This view used to flip a
+    status field with no cryptography behind it, which made the web app and
+    the verification report disagree about whether a document was signed.
+    """
     document = get_object_or_404(Document, id=document_id)
-    signer = get_object_or_404(DocumentSigner, document=document, user=request.user)
-    
-    if request.method == 'POST':
-        signer.signature_status = 'signed'
-        signer.signature_date = timezone.now()
-        signer.save()
-        
-        SignatureLog.objects.create(
-            document=document,
-            action='signed',
-            user=request.user,
-            details=f'Document signé électriquement par {request.user.username}'
-        )
-        
-        # Check total progress
-        all_signers = document.signers.all()
-        signed_count = all_signers.filter(signature_status='signed').count()
-        
-        if signed_count == all_signers.count():
-            document.status = 'fully_signed'
-        else:
-            document.status = 'partially_signed'
-        document.save()
-        
-        messages.success(request, 'Félicitations! Vous avez signé le document avec succès.')
-        return redirect('chiffrement_app:document_detail', document_id=document.id)
-        
+    get_object_or_404(DocumentSigner, document=document, user=request.user)
+
+    messages.info(
+        request,
+        "La signature se fait depuis l'application mobile : votre clé privée "
+        "ne quitte jamais votre téléphone et votre passkey doit confirmer "
+        "chaque signature.",
+    )
+
     return redirect('chiffrement_app:document_detail', document_id=document.id)
 
 
 @login_required(login_url='chiffrement_app:login')
 def verify_document(request, document_id):
-    document = get_object_or_404(Document, id=document_id)
-    
-    # Recalculate current hash
-    hash_sha256 = hashlib.sha256()
-    try:
-        with document.file.open('rb') as f:
-            for chunk in f.chunks():
-                hash_sha256.update(chunk)
-        current_hash = hash_sha256.hexdigest()
-    except Exception:
-        current_hash = ""
+    """Run the same verification the mobile app sees, and show every check.
 
-    is_valid = (current_hash == document.file_hash) and bool(document.file_hash)
-    signers = document.signers.select_related('user__profile').all()
-    logs = document.logs.select_related('user').all()
+    The old version compared the file against its stored hash and called that
+    'verified'. That is only the fourth of the four conditions in §2.5; the
+    signatures themselves were never checked.
+    """
+    document = get_object_or_404(Document, id=document_id)
+
+    report = run_verification(document)
 
     context = {
         'document': document,
-        'current_hash': current_hash,
-        'is_valid': is_valid,
-        'signers': signers,
-        'logs': logs,
+        'report': report,
+        'current_hash': report['current_hash'],
+        'is_valid': report['verdict'] == 'valid',
+        'signers': document.signers.select_related('user__profile').all(),
+        'logs': document.logs.select_related('user').all(),
     }
     return render(request, 'documents/verify.html', context)
 
@@ -458,12 +428,7 @@ def user_detail(request, user_id):
 
 # ============ Passkeys ============
 
-RP_ID = settings.PASSKEY_HOST
-RP_NAME = settings.PASSKEY_RP_NAME
-ORIGIN = f'https://{settings.PASSKEY_HOST}'
-EXPECTED_ORIGINS = [
-    f'android:apk-key-hash:{settings.PASSKEY_APK_KEY_HASH}'
-]
+from .webauthn_config import EXPECTED_ORIGINS, ORIGIN, RP_ID, RP_NAME  # noqa: F401
 
 
 def assetlinks(request):
@@ -522,7 +487,10 @@ def register_verify(request):
     credential = body['credential']
 
     user = User.objects.get(username=username)
-    challenge = base64.urlsafe_b64decode(request.session['registration_challenge'] + '==')
+    stored_challenge = request.session.get('registration_challenge')
+    challenge = (
+        base64.urlsafe_b64decode(stored_challenge + '==') if stored_challenge else None
+    )
 
     if not challenge:
         return JsonResponse({'error': 'No registration ceremony'}, status=400)
@@ -542,7 +510,7 @@ def register_verify(request):
         sign_count=verification.sign_count,
     )
 
-    del request.session['registration_challenge']
+    request.session.pop('registration_challenge', None)
 
     return JsonResponse({'success': True, 'username': username})
 
@@ -583,7 +551,10 @@ def login_verify(request):
     body = json.loads(request.body)
     credential = body['credential']
 
-    challenge = base64.urlsafe_b64decode(request.session['authentication_challenge'] + '==')
+    stored_challenge = request.session.get('authentication_challenge')
+    challenge = (
+        base64.urlsafe_b64decode(stored_challenge + '==') if stored_challenge else None
+    )
     user_id = request.session.get('authentication_user')
 
     if not challenge or not user_id:
@@ -606,7 +577,12 @@ def login_verify(request):
     passkey.sign_count = verification.new_sign_count
     passkey.save(update_fields=['sign_count'])
 
-    del request.session['authentication_challenge']
-    del request.session['authentication_user']
+    # Establish the session the mobile JSON API authenticates against. Without
+    # this the client holds a cookie for an anonymous session and every
+    # /api/ call comes back 401.
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+
+    request.session.pop('authentication_challenge', None)
+    request.session.pop('authentication_user', None)
 
     return JsonResponse({'success': True, 'username': user.username})

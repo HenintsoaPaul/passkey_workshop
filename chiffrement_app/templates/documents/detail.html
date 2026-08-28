@@ -76,16 +76,14 @@
             <!-- Signature Action Banner (If user needs to sign) -->
             {% if user_signer and user_signer.signature_status != 'signed' and document.status != 'archived' %}
                 <div class="p-4 border rounded-3 mb-4 text-center" style="background: rgba(99, 102, 241, 0.12); border-color: var(--token-border-strong) !important;">
-                    <i class="fa-solid fa-signature fs-2 mb-2" style="color: var(--token-accent-pink);"></i>
+                    <i class="fa-solid fa-mobile-screen-button fs-2 mb-2" style="color: var(--token-accent-pink);"></i>
                     <h4 class="h5 fw-bold text-white mb-2">Votre signature est requise sur ce document</h4>
-                    <p class="text-token-muted small mb-3">En cliquant sur le bouton ci-dessous, vous apposerez votre signature numérique officielle.</p>
-                    
-                    <form method="POST" action="{% url 'chiffrement_app:sign_document' document_id=document.id %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-gradient-primary px-4 py-2">
-                            <i class="fa-solid fa-pen-nib me-2"></i>Signer le document maintenant
-                        </button>
-                    </form>
+                    <p class="text-token-muted small mb-0">
+                        Ouvrez l'application mobile pour signer. Votre clé privée RSA ne
+                        quitte jamais votre téléphone, et votre passkey doit confirmer
+                        chaque signature : un navigateur ne peut pas produire une
+                        signature valide.
+                    </p>
                 </div>
             {% endif %}
 

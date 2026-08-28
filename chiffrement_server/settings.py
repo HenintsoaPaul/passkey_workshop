@@ -117,15 +117,17 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Uploaded documents and signature images. MEDIA_URL is never wired into
+# urlpatterns on purpose: a signed document is only reachable through
+# `api.document_file`, which checks that the caller is the owner or an
+# assigned signer.
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [],
-    'DEFAULT_PERMISSION_CLASSES': [],
-}
 
 # Passkey / WebAuthn configuration, read from config.ini so it can be changed
 # without touching code (e.g. whenever the dev tunnel URL rotates).
@@ -139,6 +141,23 @@ PASSKEY_APK_KEY_HASH = _config.get('passkey', 'apk_key_hash', fallback='')
 ANDROID_PACKAGE_NAME = _config.get('android', 'package_name', fallback='')
 ANDROID_CERT_FINGERPRINT = _config.get('android', 'cert_fingerprint', fallback='')
 
+# A signing confirmation is worthless if the authenticator does not actually
+# check who is holding the phone, so user verification is required by default.
+# Relax it from config.ini only when working against an emulator that cannot
+# do biometrics.
+SIGNING_REQUIRE_USER_VERIFICATION = _config.getboolean(
+    'signature', 'require_user_verification', fallback=True
+)
+
+# How long a signing challenge stays usable. Short: it is issued and consumed
+# within a single tap on the phone.
+SIGNING_CHALLENGE_TTL_SECONDS = _config.getint(
+    'signature', 'challenge_ttl_seconds', fallback=180
+)
+
 ALLOWED_HOSTS = [
-    PASSKEY_HOST
+    PASSKEY_HOST,
+    'localhost',
+    '127.0.0.1',
+    'testserver',
 ]

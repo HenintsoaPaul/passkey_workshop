@@ -21,5 +21,6 @@ from chiffrement_app import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('chiffrement_app/', include('chiffrement_app.urls')),
+    path('api/', include('chiffrement_app.api_urls')),
     path('.well-known/assetlinks.json', views.assetlinks),
 ]

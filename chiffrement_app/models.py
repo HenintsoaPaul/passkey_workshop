@@ -147,3 +147,118 @@ class Passkey(models.Model):
         ordering = ['-created_at']
         verbose_name = "Clé d'accès"
         verbose_name_plural = "Clés d'accès"
+
+
+class SigningKey(models.Model):
+    """Public half of a user's RSA pair.
+
+    The private half is generated on the phone and never leaves it, so this
+    table only ever holds a PEM-encoded public key. Superseded keys are kept
+    (revoked, not deleted) because a signature must be verified against the key
+    that was active when it was produced, not the newest one.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signing_keys')
+    public_key_pem = models.TextField()
+    algorithm = models.CharField(max_length=50, default='RSA-2048')
+
+    # SHA-256 of the DER public key, so the phone and the server can name the
+    # same key in a form a human can compare on screen.
+    fingerprint = models.CharField(max_length=64, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None
+
+    def __str__(self):
+        state = 'active' if self.is_active else 'révoquée'
+        return f"{self.user.username} - {self.fingerprint[:16]} ({state})"
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Clé de signature'
+        verbose_name_plural = 'Clés de signature'
+
+
+class SigningChallenge(models.Model):
+    """One-shot passkey challenge authorizing a single signing operation.
+
+    An open session is not enough to sign: the phone asks for a challenge, the
+    authenticator signs it, and the server accepts the RSA signature only if
+    that assertion checks out. Binding the challenge to the user, the document
+    *and* the digest being signed is what makes it authorize this signature
+    rather than any signature.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signing_challenges')
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signing_challenges')
+    challenge = models.BinaryField()
+    document_hash = models.CharField(max_length=64)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    def is_usable(self, at=None):
+        at = at or timezone.now()
+        return self.consumed_at is None and at < self.expires_at
+
+    def consume(self):
+        self.consumed_at = timezone.now()
+        self.save(update_fields=['consumed_at'])
+
+    def __str__(self):
+        return f"{self.user.username} - {self.document.title}"
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Défi de signature'
+        verbose_name_plural = 'Défis de signature'
+
+
+class Signature(models.Model):
+    """An RSA signature over a document's SHA-256 digest.
+
+    `document_hash` is the digest that was actually signed. Comparing it with
+    the document's current `file_hash` is what detects a document modified
+    after the fact, and comparing signatures with each other is what proves
+    every signer signed the same bytes.
+    """
+
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signatures')
+    signer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signatures')
+
+    # PROTECT: a key that signed something can be revoked but never deleted,
+    # otherwise its signatures become unverifiable.
+    signing_key = models.ForeignKey(SigningKey, on_delete=models.PROTECT, related_name='signatures')
+
+    document_hash = models.CharField(max_length=64)
+    signature_value = models.TextField(help_text='Signature RSA encodée en base64')
+    algorithm = models.CharField(max_length=50, default='RSASSA-PKCS1-v1_5-SHA256')
+
+    challenge = models.ForeignKey(
+        SigningChallenge,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='signatures',
+    )
+
+    signed_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.signer.username} - {self.document.title}"
+
+    class Meta:
+        ordering = ['-signed_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['document', 'signer'],
+                name='unique_signature_per_signer_and_document',
+            )
+        ]
+        verbose_name = 'Signature'
+        verbose_name_plural = 'Signatures'
