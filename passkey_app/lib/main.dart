@@ -97,6 +97,15 @@ class _MyAppState extends State<MyApp> {
   /// first signature responsive. A failure is logged and retried at signing
   /// time rather than blocking the session.
   Future<void> _prepareSigningKey() async {
+    // The profile name is what colleagues recognise on screen; the login is
+    // just how you type yourself in.
+    try {
+      final me = await Api.me();
+      _session.setDisplayName(me['name'] as String?);
+    } catch (e) {
+      _session.addLog('Profile lookup failed: $e');
+    }
+
     try {
       _session.addLog('Clé de signature : ${_signingService.backendLabel}');
       _session.setSigningKeyFingerprint(

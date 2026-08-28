@@ -43,10 +43,6 @@ enum DocumentStatus {
 
     return DocumentStatus.draft;
   }
-
-  /// Whether this document still expects at least one signature.
-  bool get awaitsSignature =>
-      this == DocumentStatus.pending || this == DocumentStatus.partiallySigned;
 }
 
 /// Where a single signer stands on a document.

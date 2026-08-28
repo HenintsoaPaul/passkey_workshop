@@ -42,6 +42,15 @@ class AppSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setDisplayName(String? name) {
+    if (name == null || name.isEmpty || _displayName == name) {
+      return;
+    }
+
+    _displayName = name;
+    notifyListeners();
+  }
+
   void setSigningBackend(String? backend) {
     if (_signingBackend == backend) {
       return;
