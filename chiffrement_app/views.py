@@ -561,15 +561,63 @@ def assetlinks(request):
     ], safe=False)
 
 
+def passkey_error(code, detail, status=400):
+    """Same envelope as the /api/ endpoints, so the client parses one shape."""
+    return JsonResponse({'error': code, 'detail': detail}, status=status)
+
+
+def read_passkey_body(request):
+    try:
+        return json.loads(request.body or b'{}')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
 @csrf_exempt
 def register_options(request):
+    """Begin enrolling a passkey — but only for someone who proves who they are.
+
+    Enrolling a passkey creates a credential that logs in without a password
+    ever again, so the request has to be authenticated. It previously took a
+    username alone and called get_or_create, which meant anyone could invent
+    an account, or bind their own passkey to somebody else's username and sign
+    in as them.
+
+    The account password is used here and only here: once the passkey exists,
+    logging in never asks for it again.
+    """
     if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+        return passkey_error('method_not_allowed', 'POST requis.', status=405)
 
-    body = json.loads(request.body)
-    username = body['username']
+    body = read_passkey_body(request)
 
-    user, _ = User.objects.get_or_create(username=username, defaults={'email': username})
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    username = (body.get('username') or '').strip()
+    password = body.get('password') or ''
+
+    if not username:
+        return passkey_error('missing_username', "Saisissez votre nom d'utilisateur.")
+
+    if not password:
+        return passkey_error(
+            'missing_password',
+            'Saisissez le mot de passe de votre compte pour créer une passkey.',
+        )
+
+    user = authenticate(request, username=username, password=password)
+
+    if user is None:
+        # One message for both cases on purpose: distinguishing them would
+        # confirm which usernames exist.
+        return passkey_error(
+            'invalid_credentials',
+            "Nom d'utilisateur ou mot de passe incorrect.",
+            status=401,
+        )
+
+    request.session['registration_user'] = user.id
 
     options = generate_registration_options(
         rp_id=RP_ID,
@@ -594,26 +642,52 @@ def register_verify(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
-    body = json.loads(request.body)
-    username = body['username']
-    credential = body['credential']
+    body = read_passkey_body(request)
 
-    user = User.objects.get(username=username)
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    username = (body.get('username') or '').strip()
+    credential = body.get('credential')
+
     stored_challenge = request.session.get('registration_challenge')
     challenge = (
         base64.urlsafe_b64decode(stored_challenge + '==') if stored_challenge else None
     )
+    user_id = request.session.get('registration_user')
 
-    if not challenge:
-        return JsonResponse({'error': 'No registration ceremony'}, status=400)
+    if not challenge or not user_id:
+        return passkey_error(
+            'no_ceremony',
+            "La création de la passkey a expiré. Recommencez depuis le début.",
+        )
 
-    verification = verify_registration_response(
-        credential=credential,
-        expected_challenge=challenge,
-        expected_rp_id=RP_ID,
-        expected_origin=EXPECTED_ORIGINS,
-        require_user_verification=False,
-    )
+    # The ceremony has to finish for the account that started it, so a reply
+    # cannot be redirected onto a different user.
+    user = User.objects.filter(id=user_id, username=username).first()
+
+    if user is None:
+        return passkey_error(
+            'ceremony_mismatch',
+            "Cette création de passkey ne correspond pas au compte vérifié.",
+        )
+
+    if not credential:
+        return passkey_error('missing_credential', 'Aucune passkey reçue.')
+
+    try:
+        verification = verify_registration_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=RP_ID,
+            expected_origin=EXPECTED_ORIGINS,
+            require_user_verification=False,
+        )
+    except Exception as error:
+        return passkey_error(
+            'passkey_rejected',
+            f"La passkey n'a pas pu être vérifiée : {error}",
+        )
 
     Passkey.objects.create(
         user=user,
@@ -623,6 +697,7 @@ def register_verify(request):
     )
 
     request.session.pop('registration_challenge', None)
+    request.session.pop('registration_user', None)
 
     return JsonResponse({'success': True, 'username': username})
 
@@ -630,13 +705,31 @@ def register_verify(request):
 @csrf_exempt
 def login_options(request):
     if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+        return passkey_error('method_not_allowed', 'POST requis.', status=405)
 
-    body = json.loads(request.body)
-    username = body['username']
+    body = read_passkey_body(request)
 
-    user = User.objects.get(username=username)
-    passkeys = Passkey.objects.filter(user=user)
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    username = (body.get('username') or '').strip()
+
+    if not username:
+        return passkey_error('missing_username', "Saisissez votre nom d'utilisateur.")
+
+    user = User.objects.filter(username=username).first()
+    passkeys = list(Passkey.objects.filter(user=user)) if user else []
+
+    if not passkeys:
+        # Deliberately the same answer whether the account is unknown or simply
+        # has no passkey yet: actionable for the owner, uninformative to
+        # someone probing for usernames.
+        return passkey_error(
+            'no_passkey',
+            "Aucune passkey n'est associée à ce compte sur ce serveur. "
+            "Créez-en une avec le mot de passe de votre compte.",
+            status=404,
+        )
 
     allow_credentials = [
         PublicKeyCredentialDescriptor(id=bytes(pk.credential_id))
@@ -655,13 +748,38 @@ def login_options(request):
     return JsonResponse(json.loads(options_to_json(options)))
 
 
+def _verified_assertion(credential, challenge, passkey):
+    """Check a WebAuthn assertion, returning None instead of raising.
+
+    A passkey the server cannot verify is an expected outcome — a stale
+    credential, a different device — and deserves a 401 with an explanation
+    rather than a 500 with a stack trace.
+    """
+    try:
+        return verify_authentication_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=RP_ID,
+            expected_origin=EXPECTED_ORIGINS,
+            credential_public_key=bytes(passkey.public_key),
+            credential_current_sign_count=passkey.sign_count,
+            require_user_verification=False,
+        )
+    except Exception:
+        return None
+
+
 @csrf_exempt
 def login_verify(request):
     if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+        return passkey_error('method_not_allowed', 'POST requis.', status=405)
 
-    body = json.loads(request.body)
-    credential = body['credential']
+    body = read_passkey_body(request)
+
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    credential = body.get('credential')
 
     stored_challenge = request.session.get('authentication_challenge')
     challenge = (
@@ -670,21 +788,38 @@ def login_verify(request):
     user_id = request.session.get('authentication_user')
 
     if not challenge or not user_id:
-        return JsonResponse({'error': 'No authentication ceremony'}, status=400)
+        return passkey_error(
+            'no_ceremony',
+            'La connexion a expiré. Réessayez de vous connecter.',
+        )
 
-    user = User.objects.get(id=user_id)
-    credential_id = base64url_to_bytes(credential['rawId'])
-    passkey = Passkey.objects.get(user=user, credential_id=credential_id)
+    if not credential or not credential.get('rawId'):
+        return passkey_error('missing_credential', 'Aucune passkey reçue.')
 
-    verification = verify_authentication_response(
-        credential=credential,
-        expected_challenge=challenge,
-        expected_rp_id=RP_ID,
-        expected_origin=EXPECTED_ORIGINS,
-        credential_public_key=bytes(passkey.public_key),
-        credential_current_sign_count=passkey.sign_count,
-        require_user_verification=False,
+    user = User.objects.filter(id=user_id).first()
+    passkey = (
+        Passkey.objects.filter(
+            user=user, credential_id=base64url_to_bytes(credential['rawId'])
+        ).first()
+        if user
+        else None
     )
+
+    if passkey is None:
+        return passkey_error(
+            'unknown_passkey',
+            "Cette passkey n'est pas enregistrée pour ce compte sur ce serveur.",
+            status=401,
+        )
+
+    verification = _verified_assertion(credential, challenge, passkey)
+
+    if verification is None:
+        return passkey_error(
+            'passkey_rejected',
+            "La passkey n'a pas pu être vérifiée par le serveur.",
+            status=401,
+        )
 
     passkey.sign_count = verification.new_sign_count
     passkey.save(update_fields=['sign_count'])

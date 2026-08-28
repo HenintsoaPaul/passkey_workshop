@@ -254,6 +254,28 @@ Toute erreur attendue arrive sous la forme
 `not_a_signer` (403), `already_signed` (409), `hash_mismatch`,
 `challenge_expired`, `invalid_signature` (422)…
 
+### Enrôlement d'une passkey
+
+Créer une passkey exige le mot de passe du compte ; s'en servir ne l'exige
+plus jamais.
+
+```
+1. L'administrateur crée le compte (web) et communique un mot de passe provisoire
+2. POST /chiffrement_app/register/options/  {"username", "password"}
+                                    → refusé si les identifiants sont faux
+3. L'appareil crée la passkey, POST .../register/verify/
+4. Ensuite : POST .../login/options/ + /login/verify/ — sans mot de passe
+```
+
+Sans cette vérification, `register/options/` acceptait un nom d'utilisateur
+seul et faisait un `get_or_create` : n'importe qui pouvait inventer un compte,
+ou rattacher **sa** passkey au compte d'un autre et se connecter à sa place.
+La cérémonie doit aussi se terminer pour le compte qui l'a commencée, sinon
+la réponse pourrait être redirigée vers un autre utilisateur.
+
+Les deux endpoints répondent d'une manière identique pour « compte inconnu »
+et « mot de passe faux », afin de ne pas révéler quels comptes existent.
+
 ### Déroulé d'une signature
 
 ```
