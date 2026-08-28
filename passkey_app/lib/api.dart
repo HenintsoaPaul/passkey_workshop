@@ -53,13 +53,20 @@ class Api {
 
   // ============ Passkey ceremonies ============
 
+  /// Begins enrolling a passkey.
+  ///
+  /// Takes the account password: enrolling creates a credential that logs in
+  /// without a password ever again, so the server has to know who is asking.
+  /// It is the only call that ever sends one.
   static Future<Map<String, dynamic>> registerOptions(
     String username,
+    String password,
   ) async {
     final response = await _post(
       '/chiffrement_app/register/options/',
       {
         'username': username,
+        'password': password,
       },
     );
 

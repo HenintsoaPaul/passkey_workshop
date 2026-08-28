@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../passkey_service.dart';
 import '../session/app_session.dart';
+import '../utils/auth_errors.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -39,6 +40,7 @@ enum _PendingAction { none, login, register }
 
 class _AuthScreenState extends State<AuthScreen> {
   final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   _PendingAction _pending = _PendingAction.none;
   String? _message;
@@ -49,6 +51,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void dispose() {
     _usernameController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -82,6 +85,16 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
 
+    final password = _passwordController.text;
+
+    if (password.isEmpty) {
+      _setMessage(
+        'Saisissez le mot de passe de votre compte pour créer une passkey.',
+        isError: true,
+      );
+      return;
+    }
+
     setState(() {
       _pending = _PendingAction.register;
       _message = null;
@@ -90,7 +103,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       widget.session.addLog('Starting registration for $username');
 
-      final options = await Api.registerOptions(username);
+      final options = await Api.registerOptions(username, password);
       widget.session.addLog('Registration options received');
 
       final credential =
@@ -100,10 +113,13 @@ class _AuthScreenState extends State<AuthScreen> {
       await Api.registerVerify(username, credential.toJson());
       widget.session.addLog('Registration successful for $username');
 
-      _setMessage('Passkey créée. Vous pouvez vous connecter.');
+      _passwordController.clear();
+      _setMessage(
+        'Passkey créée. Connectez-vous avec, sans mot de passe.',
+      );
     } catch (e) {
       widget.session.addLog('Registration error: $e');
-      _setMessage('Échec de la création de la passkey.', isError: true);
+      _setMessage(describeAuthError(e, enrolling: true), isError: true);
     } finally {
       if (mounted) {
         setState(() => _pending = _PendingAction.none);
@@ -140,7 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
       widget.onSignedIn?.call();
     } catch (e) {
       widget.session.addLog('Login error: $e');
-      _setMessage('Échec de la connexion.', isError: true);
+      _setMessage(describeAuthError(e, enrolling: false), isError: true);
     } finally {
       if (mounted) {
         setState(() => _pending = _PendingAction.none);
@@ -175,6 +191,21 @@ class _AuthScreenState extends State<AuthScreen> {
                           hintText: 'jean.dupont',
                           enabled: !_busy,
                           onSubmitted: (_) => _login(),
+                        ),
+
+                        const SizedBox(height: AppSpacing.md),
+
+                        // Needed only to enroll: the password proves who you
+                        // are once, and the passkey replaces it afterwards.
+                        LabelledField(
+                          label: 'MOT DE PASSE DU COMPTE',
+                          controller: _passwordController,
+                          hintText: '••••••••',
+                          helperText: 'Uniquement pour créer une passkey. '
+                              'La connexion se fait ensuite sans mot de passe.',
+                          obscureText: true,
+                          enabled: !_busy,
+                          onSubmitted: (_) => _register(),
                         ),
 
                         const SizedBox(height: AppSpacing.lg),

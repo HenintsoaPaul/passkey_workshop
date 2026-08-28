@@ -20,7 +20,9 @@ void main() {
 
     expect(find.text('SignApp Passkey'), findsOneWidget);
     expect(find.text("NOM D'UTILISATEUR"), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
+    // Username, plus the password needed only to enroll a passkey.
+    expect(find.text('MOT DE PASSE DU COMPTE'), findsOneWidget);
+    expect(find.byType(TextField), findsNWidgets(2));
 
     expect(find.text('Se connecter avec une passkey'), findsOneWidget);
     expect(find.text('Créer une passkey'), findsOneWidget);
@@ -49,6 +51,10 @@ void main() {
       const MyApp(repository: MockDocumentRepository()),
     );
 
+    // The password field made the card taller, so the link can sit below the
+    // fold on a small test surface.
+    await tester.ensureVisible(find.text('Voir les journaux'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Voir les journaux'));
     await tester.pumpAndSettle();
 
