@@ -459,10 +459,10 @@ def user_detail(request, user_id):
 # ============ Passkeys ============
 
 RP_ID = settings.PASSKEY_HOST
-RP_NAME = 'Flutter Passkey POC'
+RP_NAME = settings.PASSKEY_RP_NAME
 ORIGIN = f'https://{settings.PASSKEY_HOST}'
 EXPECTED_ORIGINS = [
-    'android:apk-key-hash:1wGBlL123fidNndv9KqON3vve9Qgx5qxJESeSMk_rJs'
+    f'android:apk-key-hash:{settings.PASSKEY_APK_KEY_HASH}'
 ]
 
 
@@ -475,9 +475,9 @@ def assetlinks(request):
             ],
             'target': {
                 'namespace': 'android_app',
-                'package_name': 'com.example.passkey_app',
+                'package_name': settings.ANDROID_PACKAGE_NAME,
                 'sha256_cert_fingerprints': [
-                    'D7:01:81:94:BD:76:DD:F8:9D:36:77:6F:F4:AA:8E:37:7B:EF:7B:D4:20:C7:9A:B1:24:44:9E:48:C9:3F:AC:9B'
+                    settings.ANDROID_CERT_FINGERPRINT
                 ],
             },
         }

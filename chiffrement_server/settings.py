@@ -127,12 +127,17 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [],
 }
 
-# Passkey host, read from config.ini so it can be changed without touching code
-# (e.g. whenever the dev tunnel URL rotates).
+# Passkey / WebAuthn configuration, read from config.ini so it can be changed
+# without touching code (e.g. whenever the dev tunnel URL rotates).
 _config = configparser.ConfigParser()
 _config.read(BASE_DIR / 'config.ini')
 
 PASSKEY_HOST = _config.get('passkey', 'host', fallback='localhost:8000')
+PASSKEY_RP_NAME = _config.get('passkey', 'rp_name', fallback='Flutter Passkey POC')
+PASSKEY_APK_KEY_HASH = _config.get('passkey', 'apk_key_hash', fallback='')
+
+ANDROID_PACKAGE_NAME = _config.get('android', 'package_name', fallback='')
+ANDROID_CERT_FINGERPRINT = _config.get('android', 'cert_fingerprint', fallback='')
 
 ALLOWED_HOSTS = [
     PASSKEY_HOST
