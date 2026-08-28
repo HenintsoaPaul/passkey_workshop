@@ -241,7 +241,14 @@ def document_detail(request, document_id):
 @login_required(login_url='chiffrement_app:login')
 def assign_signers(request, document_id):
     document = get_object_or_404(Document, id=document_id, owner=request.user)
-    
+
+    if document.status == 'archived':
+        messages.error(
+            request,
+            "Ce document est archivé : ses signataires ne peuvent plus changer.",
+        )
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
     if request.method == 'POST':
         signer_ids = request.POST.getlist('signers')
         current_signers = DocumentSigner.objects.filter(document=document)

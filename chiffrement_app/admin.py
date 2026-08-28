@@ -22,11 +22,11 @@ class DocumentVersionInline(admin.TabularInline):
     model = DocumentVersion
     extra = 0
     # A version is a record of what was signed; it is never edited after the
-    # fact, only superseded.
-    readonly_fields = (
-        'version_number', 'file', 'sha256', 'file_size', 'mime_type',
-        'created_at', 'created_by',
-    )
+    # fact, only superseded. `file` is deliberately absent: the admin is a web
+    # surface, and §1 keeps the signed document to the mobile app.
+    fields = ('version_number', 'sha256', 'file_size', 'mime_type',
+              'created_at', 'created_by')
+    readonly_fields = fields
     can_delete = False
 
     def has_add_permission(self, request, obj):
@@ -46,10 +46,13 @@ class DocumentVersionAdmin(admin.ModelAdmin):
     list_display = ('document', 'version_number', 'sha256', 'created_at', 'created_by')
     search_fields = ('document__title', 'sha256')
     list_filter = ('created_at',)
-    readonly_fields = (
-        'document', 'version_number', 'file', 'sha256', 'file_size',
-        'mime_type', 'created_at', 'created_by',
-    )
+
+    # No `file`: rendering it here would put a download link to the signed
+    # document in a browser, which is exactly what §1 forbids. The digest is
+    # enough to audit which content a version holds.
+    fields = ('document', 'version_number', 'sha256', 'file_size',
+              'mime_type', 'created_at', 'created_by')
+    readonly_fields = fields
 
     def has_add_permission(self, request):
         return False
@@ -87,19 +90,33 @@ class SignatureAdmin(admin.ModelAdmin):
     search_fields = ('document__title', 'signer__username', 'document_hash')
     list_filter = ('algorithm', 'signed_at')
     # A recorded signature is evidence: readable in the admin, never editable.
-    readonly_fields = (
+    # The signature value itself is withheld — it is an electronic signature,
+    # and §1 keeps those to the mobile app. Everything needed to audit one
+    # (who, when, over which digest, with which key) is here.
+    fields = (
         'document',
         'document_version',
         'signer',
         'signing_key',
         'document_hash',
-        'signature_value',
+        'signature_value_withheld',
         'algorithm',
         'challenge',
         'signed_at',
     )
+    readonly_fields = fields
+
+    @admin.display(description='Valeur de la signature')
+    def signature_value_withheld(self, obj):
+        return (
+            'Masquée : les signatures électroniques ne sont consultables que '
+            "depuis l'application mobile (§1)."
+        )
 
     def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
 

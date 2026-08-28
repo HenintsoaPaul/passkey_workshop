@@ -135,6 +135,78 @@ class SignedContentStaysMobileOnlyTests(WebScopeTestCase):
         self.assertRedirects(response, reverse('chiffrement_app:dashboard'))
 
 
+class AdminInterfaceTests(WebScopeTestCase):
+    """L'admin Django est une surface web : elle non plus ne doit pas exposer
+    le fichier signé ni les valeurs de signature."""
+
+    def setUp(self):
+        super().setUp()
+        self.superuser = User.objects.create_superuser(
+            username='root', password=DEFAULT_PASSWORD, email='root@x.fr'
+        )
+        UserProfile.objects.create(user=self.superuser, name='Root', email='root@x.fr')
+
+    def test_the_signature_page_withholds_the_signature_value(self):
+        signature = self.record_signature()
+        self.client.login(username='root', password=DEFAULT_PASSWORD)
+
+        response = self.client.get(
+            f'/admin/chiffrement_app/signature/{signature.id}/change/'
+        )
+        body = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(signature.signature_value, body)
+        self.assertIn('Masquée', body)
+        # What is needed to audit it is still there.
+        self.assertIn(signature.document_hash, body)
+
+    def test_the_version_page_does_not_link_to_the_file(self):
+        self.client.login(username='root', password=DEFAULT_PASSWORD)
+
+        version = self.document.current_version
+        response = self.client.get(
+            f'/admin/chiffrement_app/documentversion/{version.id}/change/'
+        )
+        body = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(version.file.url, body)
+        self.assertIn(version.sha256, body)
+
+
+class SignerAssignmentTests(WebScopeTestCase):
+
+    def test_a_user_cannot_be_assigned_twice_to_one_document(self):
+        from django.db import IntegrityError, transaction
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DocumentSigner.objects.create(
+                    document=self.document, user=self.alice
+                )
+
+    def test_an_archived_document_keeps_its_signers(self):
+        self.document.status = 'archived'
+        self.document.save()
+
+        self.client.login(username='owner', password=DEFAULT_PASSWORD)
+        response = self.client.post(
+            reverse('chiffrement_app:assign_signers',
+                    kwargs={'document_id': self.document.id}),
+            {'signers': []},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse('chiffrement_app:document_detail',
+                    kwargs={'document_id': self.document.id}),
+        )
+        # recompute_document_status refuses to move an archived document, so
+        # letting its signer list change would desynchronise the two.
+        self.assertEqual(self.document.signers.count(), 1)
+
+
 class UserAdministrationTests(WebScopeTestCase):
 
     def test_an_administrator_can_create_a_signatory(self):

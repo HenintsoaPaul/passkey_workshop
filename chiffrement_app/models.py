@@ -178,6 +178,15 @@ class DocumentSigner(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            # The state machine counts signers against signatures; a duplicate
+            # row would inflate the total and leave the document permanently
+            # short of "fully signed".
+            models.UniqueConstraint(
+                fields=['document', 'user'],
+                name='unique_signer_per_document',
+            )
+        ]
         verbose_name = 'Signataire'
         verbose_name_plural = 'Signataires'
 
