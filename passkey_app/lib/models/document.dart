@@ -137,6 +137,14 @@ class AuditEvent {
         return Icons.visibility;
       case 'created':
         return Icons.upload_file;
+      case 'version_added':
+        return Icons.difference;
+      case 'assigned':
+        return Icons.person_add;
+      case 'unassigned':
+        return Icons.person_remove;
+      case 'archived':
+        return Icons.inventory_2;
       case 'accepted':
         return Icons.thumb_up;
       case 'rejected':

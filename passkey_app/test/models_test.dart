@@ -169,6 +169,27 @@ void main() {
       expect(AuditEvent.iconForAction('inconnu'), Icons.info_outline);
     });
 
+    test('every action the server records has its own icon', () {
+      // Mirrors SignatureLog.ACTION_CHOICES. A missing entry would collapse
+      // distinct events into the same generic marker in the timeline.
+      const recorded = [
+        'created',
+        'viewed',
+        'assigned',
+        'unassigned',
+        'version_added',
+        'signed',
+        'archived',
+      ];
+
+      final icons = {
+        for (final action in recorded) action: AuditEvent.iconForAction(action),
+      };
+
+      expect(icons.values.toSet(), hasLength(recorded.length));
+      expect(icons.values, isNot(contains(Icons.info_outline)));
+    });
+
     test('survives a payload missing its optional collections', () {
       final document = Document.fromJson({'id': 3, 'title': 'Minimal'});
 

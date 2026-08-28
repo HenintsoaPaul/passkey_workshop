@@ -34,6 +34,11 @@ class VerifyScreenState extends State<VerifyScreen> {
   late Future<List<Document>> _documents = widget.repository.fetchDocuments();
 
   Future<VerificationReport>? _report;
+
+  // The list endpoint omits the audit trail — it would be dead weight on every
+  // card — so the selected document is refetched in full to get its history.
+  Future<Document?>? _detail;
+
   String? _selectedId;
 
   @override
@@ -47,6 +52,7 @@ class VerifyScreenState extends State<VerifyScreen> {
     setState(() {
       _documents = widget.repository.fetchDocuments();
       _report = null;
+      _detail = null;
       _selectedId = null;
     });
 
@@ -65,6 +71,7 @@ class VerifyScreenState extends State<VerifyScreen> {
     setState(() {
       _selectedId = document.id;
       _report = widget.repository.fetchVerification(document.id);
+      _detail = widget.repository.fetchDocument(document.id);
     });
   }
 
@@ -186,10 +193,7 @@ class VerifyScreenState extends State<VerifyScreen> {
 
                       const SizedBox(height: AppSpacing.md),
 
-                      if (selected.auditTrail.isEmpty)
-                        const _EmptyTimeline()
-                      else
-                        AuditTimeline(events: selected.auditTrail),
+                      _AuditSection(detail: _detail, fallback: selected),
 
                       const SizedBox(height: AppSpacing.lg),
 
@@ -627,18 +631,44 @@ class _DetailDivider extends StatelessWidget {
   }
 }
 
-class _EmptyTimeline extends StatelessWidget {
-  const _EmptyTimeline();
+/// The audit trail of the selected document.
+///
+/// Reads the detail payload rather than the list one: the list omits the trail,
+/// which is why this section used to render as permanently empty.
+class _AuditSection extends StatelessWidget {
+  const _AuditSection({required this.detail, required this.fallback});
+
+  final Future<Document?>? detail;
+  final Document fallback;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      child: Text(
-        "Aucun événement enregistré pour ce document.",
-        style: AppTypography.bodyMd.copyWith(
-          color: AppColors.onSurfaceVariant,
-        ),
-      ),
+    return FutureBuilder<Document?>(
+      future: detail,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final events =
+            (snapshot.data ?? fallback).auditTrail;
+
+        if (events.isEmpty) {
+          return AppCard(
+            child: Text(
+              'Aucun événement enregistré pour ce document.',
+              style: AppTypography.bodyMd.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+
+        return AuditTimeline(events: events);
+      },
     );
   }
 }

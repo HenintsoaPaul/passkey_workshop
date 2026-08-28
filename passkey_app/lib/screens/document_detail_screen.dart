@@ -9,6 +9,7 @@ import '../theme/app_typography.dart';
 import '../utils/date_format.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_top_bar.dart';
+import '../widgets/audit_timeline.dart';
 import '../widgets/meta_row.dart';
 import '../widgets/passkey_button.dart';
 import '../widgets/signature_progress.dart';
@@ -218,6 +219,13 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
             for (final signer in _document.signers) ...[
               _SignerRow(signer: signer),
               const SizedBox(height: AppSpacing.sm),
+            ],
+
+            if (_document.auditTrail.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.lg),
+              const Text('Historique', style: AppTypography.headlineSm),
+              const SizedBox(height: AppSpacing.md),
+              AuditTimeline(events: _document.auditTrail),
             ],
           ],
         ),
