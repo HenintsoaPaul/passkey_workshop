@@ -175,9 +175,16 @@ def serialize_log(log):
 
 def serialize_document(document, user, include_audit=False):
     signers = list(document.signers.select_related('user__profile'))
+    version = document.current_version
+
+    # Only the current version's signatures count towards progress.
     signatures = {
         signature.signer_id: signature
-        for signature in document.signatures.select_related('signing_key')
+        for signature in (
+            version.signatures.select_related('signing_key')
+            if version is not None
+            else []
+        )
     }
 
     payload = {
@@ -189,6 +196,8 @@ def serialize_document(document, user, include_audit=False):
         'ownerUsername': document.owner.username,
         'fileHash': document.file_hash,
         'fileSize': document.file_size,
+        'versionNumber': document.version_number,
+        'versionCount': document.versions.count(),
         'createdAt': iso(document.created_at),
         'updatedAt': iso(document.updated_at),
         'dueDate': iso(document.due_date),
@@ -225,6 +234,8 @@ def serialize_verification(report):
         'documentId': str(report['document_id']),
         'verdict': report['verdict'],
         'status': report['status'],
+        'versionNumber': report['version_number'],
+        'versionCount': report['version_count'],
         'currentHash': report['current_hash'],
         'storedHash': report['stored_hash'],
         'signedCount': report['signed_count'],
@@ -438,8 +449,17 @@ def assert_can_sign(user, document):
     if document.status == 'archived':
         raise ApiError('document_archived', 'Ce document est archivé.')
 
-    if Signature.objects.filter(document=document, signer=user).exists():
-        raise ApiError('already_signed', 'Vous avez déjà signé ce document.', status=409)
+    version = document.current_version
+
+    if version is None:
+        raise ApiError('no_version', "Ce document n'a aucun contenu.")
+
+    if Signature.objects.filter(document_version=version, signer=user).exists():
+        raise ApiError(
+            'already_signed',
+            'Vous avez déjà signé cette version du document.',
+            status=409,
+        )
 
     return signer
 
@@ -487,6 +507,7 @@ def sign_challenge(request, document_id):
     challenge = SigningChallenge.objects.create(
         user=request.user,
         document=document,
+        document_version=document.current_version,
         challenge=challenge_bytes,
         document_hash=current_hash,
         expires_at=timezone.now()
@@ -510,6 +531,7 @@ def sign_challenge(request, document_id):
     return JsonResponse({
         'challengeId': challenge.id,
         'documentHash': current_hash,
+        'versionNumber': document.version_number,
         'keyFingerprint': key.fingerprint,
         'expiresAt': iso(challenge.expires_at),
         'publicKeyOptions': json.loads(options_to_json(options)),
@@ -591,12 +613,19 @@ def sign_document(request, document_id):
 
     # --- 2. the RSA signature over the digest ---
 
+    document.refresh_current_version()
     current_hash = current_document_hash(document)
 
-    if current_hash != challenge.document_hash:
+    if (
+        current_hash != challenge.document_hash
+        or challenge.document_version_id != (
+            document.current_version.id if document.current_version else None
+        )
+    ):
         raise ApiError(
             'document_changed',
-            'Le document a changé pendant la signature. Recommencez.',
+            'Une nouvelle version a été déposée pendant la signature. '
+            'Rechargez le document et recommencez.',
         )
 
     is_valid, reason = verify_signature(
@@ -608,6 +637,7 @@ def sign_document(request, document_id):
 
     signature = Signature.objects.create(
         document=document,
+        document_version=challenge.document_version,
         signer=request.user,
         signing_key=key,
         document_hash=challenge.document_hash,
@@ -624,6 +654,7 @@ def sign_document(request, document_id):
             'signature': {
                 'id': signature.id,
                 'documentHash': signature.document_hash,
+                'versionNumber': document.version_number,
                 'algorithm': signature.algorithm,
                 'signedAt': iso(signature.signed_at),
                 'keyFingerprint': key.fingerprint,

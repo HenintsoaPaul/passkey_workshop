@@ -1,9 +1,80 @@
 """Document state and the global verification described in §2.5 of the TP."""
 
+import mimetypes
+
 from django.utils import timezone
 
 from .crypto import sha256_of_file, verify_signature
-from .models import Document, DocumentSigner, SignatureLog
+from .models import Document, DocumentSigner, DocumentVersion, SignatureLog
+
+
+def create_document(*, title, owner, file, description='', due_date=None):
+    """Create a document together with its first version."""
+    document = Document.objects.create(
+        title=title,
+        description=description,
+        owner=owner,
+        status='draft',
+        due_date=due_date,
+    )
+
+    add_version(document, file, owner, log_details=f'Document "{title}" créé')
+
+    return document
+
+
+def add_version(document, file, user, log_details=None):
+    """Record new content for a document, invalidating the signatures.
+
+    §2.5: any modification creates a new version and requires new signatures.
+    The previous version and its signatures are kept — they remain valid for
+    the bytes they covered — but every signer is put back to pending, because
+    nobody has yet agreed to *these* bytes.
+    """
+    if document.status == 'archived':
+        raise ValueError("Un document archivé ne peut plus être modifié.")
+
+    previous = document.current_version
+    next_number = (previous.version_number + 1) if previous else 1
+
+    version = DocumentVersion.objects.create(
+        document=document,
+        version_number=next_number,
+        file=file,
+        sha256='',
+        created_by=user,
+    )
+
+    # Hashed once, here, from what actually landed on disk. The old
+    # Document.save() re-read the whole file on every save, including a plain
+    # status update.
+    version.sha256 = sha256_of_file(version.file)
+    version.file_size = version.file.size
+    version.mime_type = (
+        mimetypes.guess_type(version.file.name)[0] or 'application/octet-stream'
+    )
+    version.save(update_fields=['sha256', 'file_size', 'mime_type'])
+
+    document.refresh_current_version()
+
+    if previous is not None:
+        # A new version means the old approvals no longer apply.
+        DocumentSigner.objects.filter(document=document).update(
+            signature_status='pending', signature_date=None
+        )
+
+    SignatureLog.objects.create(
+        document=document,
+        action='created',
+        user=user,
+        details=log_details
+        or f'Version {next_number} déposée : les signatures précédentes ne '
+           f'valent plus pour cette version',
+    )
+
+    recompute_document_status(document)
+
+    return version
 
 
 def recompute_document_status(document, save=True):
@@ -17,12 +88,15 @@ def recompute_document_status(document, save=True):
         return document.status
 
     signers = document.signers.all()
+    version = document.current_version
 
-    if not signers:
+    if not signers or version is None:
         status = 'draft'
     else:
-        signed = document.signatures.values_list('signer_id', flat=True)
-        signed_count = sum(1 for signer in signers if signer.user_id in set(signed))
+        # Only the current version counts: signatures on a superseded version
+        # are history, not progress.
+        signed = set(version.signatures.values_list('signer_id', flat=True))
+        signed_count = sum(1 for signer in signers if signer.user_id in signed)
 
         if signed_count == 0:
             status = 'pending'
@@ -64,8 +138,15 @@ def verify_document(document):
     apart instead of collapsing them into one boolean.
     """
     signers = list(document.signers.select_related('user__profile'))
-    signatures = list(
-        document.signatures.select_related('signer__profile', 'signing_key')
+    version = document.current_version
+
+    # Only the current version is verified. A superseded version's signatures
+    # stay in the database and stay mathematically valid, but they say nothing
+    # about whether *this* content has been agreed to.
+    signatures = (
+        list(version.signatures.select_related('signer__profile', 'signing_key'))
+        if version is not None
+        else []
     )
     by_signer = {signature.signer_id: signature for signature in signatures}
 
@@ -102,10 +183,15 @@ def verify_document(document):
     ]
 
     signed_hashes = {signature.document_hash for signature in signatures}
+    version_hash = version.sha256 if version is not None else None
 
     all_present = bool(signers) and not missing
     all_valid = bool(signatures) and all(r['is_valid'] for r in signature_reports)
-    same_version = len(signed_hashes) <= 1
+
+    # Every signature must cover the digest this version claims to have. A row
+    # whose document_hash was edited fails here even though it points at the
+    # right version.
+    same_version = bool(version_hash) and signed_hashes <= {version_hash}
     hash_matches = bool(signatures) and signed_hashes == {current_hash}
 
     checks = [
@@ -130,9 +216,12 @@ def verify_document(document):
             'label': 'Toutes les signatures portent sur la même version',
             'passed': same_version,
             'detail': (
-                f'{len(signed_hashes)} empreintes différentes signées.'
-                if not same_version
-                else None
+                None
+                if same_version
+                else f'{len(signed_hashes)} empreinte(s) signée(s) ne '
+                     f'correspondent pas à la version {version.version_number}.'
+                if version is not None
+                else 'Aucune version enregistrée.'
             ),
         },
         {
@@ -171,6 +260,8 @@ def verify_document(document):
         'document_id': document.id,
         'title': document.title,
         'status': document.status,
+        'version_number': version.version_number if version is not None else 0,
+        'version_count': document.versions.count(),
         'verdict': verdict,
         'current_hash': current_hash,
         'stored_hash': document.file_hash,

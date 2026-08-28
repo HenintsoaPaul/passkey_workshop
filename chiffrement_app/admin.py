@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Document,
     DocumentSigner,
+    DocumentVersion,
     Signature,
     SignatureLog,
     SigningChallenge,
@@ -17,12 +18,44 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_filter = ('created_at', 'organization')
 
 
+class DocumentVersionInline(admin.TabularInline):
+    model = DocumentVersion
+    extra = 0
+    # A version is a record of what was signed; it is never edited after the
+    # fact, only superseded.
+    readonly_fields = (
+        'version_number', 'file', 'sha256', 'file_size', 'mime_type',
+        'created_at', 'created_by',
+    )
+    can_delete = False
+
+    def has_add_permission(self, request, obj):
+        return False
+
+
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ('title', 'owner', 'status', 'file_size', 'created_at', 'due_date')
-    search_fields = ('title', 'description', 'owner__username', 'file_hash')
+    list_display = ('title', 'owner', 'status', 'version_number', 'created_at', 'due_date')
+    search_fields = ('title', 'description', 'owner__username', 'versions__sha256')
     list_filter = ('status', 'created_at', 'due_date')
-    readonly_fields = ('file_hash', 'file_size')
+    inlines = [DocumentVersionInline]
+
+
+@admin.register(DocumentVersion)
+class DocumentVersionAdmin(admin.ModelAdmin):
+    list_display = ('document', 'version_number', 'sha256', 'created_at', 'created_by')
+    search_fields = ('document__title', 'sha256')
+    list_filter = ('created_at',)
+    readonly_fields = (
+        'document', 'version_number', 'file', 'sha256', 'file_size',
+        'mime_type', 'created_at', 'created_by',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(DocumentSigner)
@@ -50,12 +83,13 @@ class SigningKeyAdmin(admin.ModelAdmin):
 
 @admin.register(Signature)
 class SignatureAdmin(admin.ModelAdmin):
-    list_display = ('document', 'signer', 'algorithm', 'signed_at')
+    list_display = ('document', 'document_version', 'signer', 'algorithm', 'signed_at')
     search_fields = ('document__title', 'signer__username', 'document_hash')
     list_filter = ('algorithm', 'signed_at')
     # A recorded signature is evidence: readable in the admin, never editable.
     readonly_fields = (
         'document',
+        'document_version',
         'signer',
         'signing_key',
         'document_hash',

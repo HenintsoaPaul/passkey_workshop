@@ -31,8 +31,20 @@ from webauthn.helpers.structs import (
     PublicKeyCredentialDescriptor,
 )
 
-from .models import Document, DocumentSigner, UserProfile, SignatureLog, Passkey
-from .services import recompute_document_status, verify_document as run_verification
+from .models import (
+    Document,
+    DocumentSigner,
+    Passkey,
+    SignatureLog,
+    SigningKey,
+    UserProfile,
+)
+from .services import (
+    add_version,
+    create_document,
+    recompute_document_status,
+    verify_document as run_verification,
+)
 
 # ============ Authentification ============
 
@@ -139,22 +151,12 @@ def upload_document(request):
                 'available_users': available_users
             })
         
-        initial_status = 'pending' if signer_ids else 'draft'
-
-        document = Document.objects.create(
+        document = create_document(
             title=title,
             description=description,
             file=file,
             owner=request.user,
-            status=initial_status,
-            due_date=due_date if due_date else None
-        )
-        
-        SignatureLog.objects.create(
-            document=document,
-            action='created',
-            user=request.user,
-            details=f'Document "{title}" créé'
+            due_date=due_date if due_date else None,
         )
 
         if signer_ids:
@@ -171,7 +173,9 @@ def upload_document(request):
                     user=request.user,
                     details=f'Signataire {signer_user.username} affecté au document'
                 )
-        
+
+            recompute_document_status(document)
+
         messages.success(request, 'Document téléversé avec succès!')
         return redirect('chiffrement_app:document_detail', document_id=document.id)
     
@@ -204,7 +208,14 @@ def document_detail(request, document_id):
 
     signers = document.signers.select_related('user__profile').all()
     total_signers = signers.count()
-    signed_count = signers.filter(signature_status='signed').count()
+
+    # Counted from the signatures on the current version, so the page cannot
+    # claim progress the verification report would deny.
+    version = document.current_version
+    signed_ids = set(
+        version.signatures.values_list('signer_id', flat=True) if version else []
+    )
+    signed_count = len(signed_ids)
     progress_pct = int((signed_count / total_signers) * 100) if total_signers > 0 else 0
 
     logs = document.logs.select_related('user').all()
@@ -215,11 +226,14 @@ def document_detail(request, document_id):
         'is_owner': is_owner,
         'user_signer': user_signer,
         'signers': signers,
+        'signed_ids': signed_ids,
         'total_signers': total_signers,
         'signed_count': signed_count,
         'progress_pct': progress_pct,
         'logs': logs,
         'available_users': available_users,
+        'versions': document.versions.select_related('created_by__profile'),
+        'current_version': version,
     }
     return render(request, 'documents/detail.html', context)
 
@@ -314,6 +328,40 @@ def verify_document(request, document_id):
 
 
 @login_required(login_url='chiffrement_app:login')
+def upload_version(request, document_id):
+    """Replace a document's content, which invalidates its signatures.
+
+    §2.5: a modified document is a new version, and everyone has to sign
+    again. Nothing is overwritten — the previous version and the signatures
+    made against it are kept as the record of what was agreed then.
+    """
+    document = get_object_or_404(Document, id=document_id, owner=request.user)
+
+    if request.method != 'POST':
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+    file = request.FILES.get('file')
+
+    if not file:
+        messages.error(request, 'Aucun fichier fourni.')
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+    try:
+        version = add_version(document, file, request.user)
+    except ValueError as error:
+        messages.error(request, str(error))
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+    messages.success(
+        request,
+        f'Version {version.version_number} déposée. Les signatures précédentes '
+        f'ne valent plus pour ce contenu : chaque signataire doit signer à nouveau.',
+    )
+
+    return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+
+@login_required(login_url='chiffrement_app:login')
 def archive_document(request, document_id):
     document = get_object_or_404(Document, id=document_id, owner=request.user)
     document.status = 'archived'
@@ -392,6 +440,66 @@ def profile_edit(request):
 
 
 @login_required(login_url='chiffrement_app:login')
+def user_create(request):
+    """Let an administrator create a signatory account.
+
+    §1 asks the web app to create and manage users; until now the only way in
+    was self-registration, which leaves no way to onboard a signatory.
+    """
+    if not request.user.is_staff:
+        messages.error(request, "Seul un administrateur peut créer un compte.")
+        return redirect('chiffrement_app:user_list')
+
+    if request.method == 'POST':
+        username = (request.POST.get('username') or '').strip()
+        email = (request.POST.get('email') or '').strip()
+        name = (request.POST.get('name') or '').strip()
+        password = request.POST.get('password') or ''
+
+        errors = []
+
+        if not username:
+            errors.append("Le nom d'utilisateur est obligatoire.")
+        elif User.objects.filter(username=username).exists():
+            errors.append("Ce nom d'utilisateur existe déjà.")
+
+        if email and User.objects.filter(email=email).exists():
+            errors.append("Cet email est déjà utilisé.")
+
+        if len(password) < 8:
+            errors.append('Le mot de passe doit faire au moins 8 caractères.')
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+
+            return render(request, 'users/create.html', {
+                'form_values': {'username': username, 'email': email, 'name': name},
+            })
+
+        user = User.objects.create_user(
+            username=username, email=email, password=password
+        )
+        user.first_name = name
+        user.save()
+
+        UserProfile.objects.create(
+            user=user, name=name or username, email=email
+        )
+
+        messages.success(
+            request,
+            f"Compte « {username} » créé. L'utilisateur doit maintenant "
+            f"enregistrer une passkey et une clé de signature depuis "
+            f"l'application mobile.",
+        )
+
+        return redirect('chiffrement_app:user_detail', user_id=user.id)
+
+    return render(request, 'users/create.html', {'form_values': {}})
+
+
+@login_required(login_url='chiffrement_app:login')
 def user_list(request):
     query = request.GET.get('q', '').strip()
     users = User.objects.all().select_related('profile')
@@ -415,13 +523,17 @@ def user_detail(request, user_id):
     
     documents = Document.objects.filter(owner=user_obj)
     signatures = DocumentSigner.objects.filter(user=user_obj)
-    
+
     context = {
         'target_user': user_obj,
         'profile': profile,
         'documents': documents,
         'signatures': signatures,
         'is_own_profile': request.user == user_obj,
+        # Public halves only: enough to manage a user's credentials, and
+        # nothing that could stand in for them.
+        'signing_keys': SigningKey.objects.filter(user=user_obj),
+        'passkey_count': Passkey.objects.filter(user=user_obj).count(),
     }
     return render(request, 'users/detail.html', context)
 

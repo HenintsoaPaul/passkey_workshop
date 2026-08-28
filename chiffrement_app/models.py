@@ -1,10 +1,17 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-import hashlib
+from django.utils.functional import cached_property
 
 
 class Document(models.Model):
+    """A document to be signed, independent of the bytes it currently holds.
+
+    The file itself lives in [DocumentVersion]. §2.5 requires that modifying a
+    document create a new version and invalidate the signatures, which is only
+    expressible if the content is versioned separately from the document that
+    owns it.
+    """
 
     STATUS_CHOICES = [
         ('draft', 'Brouillon'),
@@ -16,31 +23,56 @@ class Document(models.Model):
 
     title = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
-    file = models.FileField(upload_to='documents/%Y/%m/%d/')
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='documents')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
-    
-    # Integrity and verification
-    file_hash = models.CharField(max_length=64, blank=True)
-    file_size = models.BigIntegerField(null=True)
-    mime_type = models.CharField(max_length=100, blank=True)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     due_date = models.DateTimeField(null=True, blank=True)
 
-    def calculate_file_hash(self):
-        """Calcule le hash SHA256 du fichier"""
-        hash_sha256 = hashlib.sha256()
-        for chunk in self.file.chunks():
-            hash_sha256.update(chunk)
-        self.file_hash = hash_sha256.hexdigest()
-    
-    def save(self, *args, **kwargs):
-        if self.file:
-            self.calculate_file_hash()
-            self.file_size = self.file.size
-        super().save(*args, **kwargs)
+    @cached_property
+    def current_version(self):
+        """The newest version — the only one that can still be signed."""
+        return self.versions.first()
+
+    def refresh_current_version(self):
+        """Forget the cached version, after adding a new one."""
+        self.__dict__.pop('current_version', None)
+
+    def refresh_from_db(self, *args, **kwargs):
+        # Django reloads the columns but knows nothing about the cached
+        # relation, so a caller that reloaded a document would otherwise keep
+        # reading the version it had before a new one was deposited.
+        super().refresh_from_db(*args, **kwargs)
+        self.refresh_current_version()
+
+    # The current version's fields, read straight off the document so callers
+    # and templates do not each have to walk the relation.
+
+    @property
+    def file(self):
+        version = self.current_version
+        return version.file if version else None
+
+    @property
+    def file_hash(self):
+        version = self.current_version
+        return version.sha256 if version else ''
+
+    @property
+    def file_size(self):
+        version = self.current_version
+        return version.file_size if version else None
+
+    @property
+    def mime_type(self):
+        version = self.current_version
+        return version.mime_type if version else ''
+
+    @property
+    def version_number(self):
+        version = self.current_version
+        return version.version_number if version else 0
 
     def __str__(self):
         return self.title
@@ -49,6 +81,52 @@ class Document(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Document'
         verbose_name_plural = 'Documents'
+
+
+class DocumentVersion(models.Model):
+    """One immutable revision of a document's content.
+
+    Every signature names the version it covers, so "all signers signed the
+    same version" is a fact about the data rather than something the code has
+    to remember to check. Superseded versions are kept: their signatures stay
+    verifiable as a record of what was agreed at the time.
+    """
+
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='versions')
+    version_number = models.PositiveIntegerField()
+
+    file = models.FileField(upload_to='documents/%Y/%m/%d/')
+    sha256 = models.CharField(max_length=64)
+    file_size = models.BigIntegerField(null=True)
+    mime_type = models.CharField(max_length=100, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='document_versions',
+    )
+
+    @property
+    def is_current(self):
+        current = self.document.current_version
+        return current is not None and current.pk == self.pk
+
+    def __str__(self):
+        return f"{self.document.title} - v{self.version_number}"
+
+    class Meta:
+        ordering = ['-version_number']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['document', 'version_number'],
+                name='unique_version_number_per_document',
+            )
+        ]
+        verbose_name = 'Version de document'
+        verbose_name_plural = 'Versions de document'
 
 
 class UserProfile(models.Model):
@@ -195,6 +273,13 @@ class SigningChallenge(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signing_challenges')
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signing_challenges')
+    document_version = models.ForeignKey(
+        'DocumentVersion',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='signing_challenges',
+    )
     challenge = models.BinaryField()
     document_hash = models.CharField(max_length=64)
 
@@ -220,15 +305,26 @@ class SigningChallenge(models.Model):
 
 
 class Signature(models.Model):
-    """An RSA signature over a document's SHA-256 digest.
+    """An RSA signature over one version's SHA-256 digest.
 
-    `document_hash` is the digest that was actually signed. Comparing it with
-    the document's current `file_hash` is what detects a document modified
-    after the fact, and comparing signatures with each other is what proves
-    every signer signed the same bytes.
+    `document_version` says which revision was signed and `document_hash` is
+    the digest that was actually put through the private key. Keeping both
+    means a tampered row is caught too: the digest must still match the
+    version it claims to cover.
+
+    A superseded version keeps its signatures. They remain mathematically
+    valid for the bytes they covered; they simply no longer count towards the
+    current version, which is what §2.5 requires.
     """
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='signatures')
+    document_version = models.ForeignKey(
+        'DocumentVersion',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='signatures',
+    )
     signer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signatures')
 
     # PROTECT: a key that signed something can be revoked but never deleted,
@@ -256,8 +352,8 @@ class Signature(models.Model):
         ordering = ['-signed_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['document', 'signer'],
-                name='unique_signature_per_signer_and_document',
+                fields=['document_version', 'signer'],
+                name='unique_signature_per_signer_and_version',
             )
         ]
         verbose_name = 'Signature'
