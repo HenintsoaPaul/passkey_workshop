@@ -314,3 +314,96 @@ class VersionUploadTests(WebScopeTestCase):
         self.client.post(self.version_url(), {})
 
         self.assertEqual(self.document.versions.count(), 1)
+
+
+class RetentionTests(WebScopeTestCase):
+    """§1 : « conserver les documents et les informations de signature ».
+
+    Read-only was only half of it — everything was still deletable from the
+    admin, which is not retention.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.superuser = User.objects.create_superuser(
+            username='root2', password=DEFAULT_PASSWORD, email='root2@x.fr'
+        )
+        self.request = type('R', (), {'user': self.superuser})()
+
+    def admin_for(self, model):
+        from django.contrib.admin.sites import site
+        return site._registry[model]
+
+    def test_a_signature_can_never_be_deleted(self):
+        from chiffrement_app.models import Signature as SignatureModel
+
+        self.assertFalse(
+            self.admin_for(SignatureModel).has_delete_permission(self.request)
+        )
+
+    def test_a_version_can_never_be_deleted(self):
+        from chiffrement_app.models import DocumentVersion
+
+        self.assertFalse(
+            self.admin_for(DocumentVersion).has_delete_permission(self.request)
+        )
+
+    def test_the_audit_log_can_never_be_deleted(self):
+        from chiffrement_app.models import SignatureLog
+
+        self.assertFalse(
+            self.admin_for(SignatureLog).has_delete_permission(self.request)
+        )
+
+    def test_a_signed_document_cannot_be_deleted(self):
+        """Deleting it would cascade to every signature it carries."""
+        from chiffrement_app.models import Document as DocumentModel
+
+        admin = self.admin_for(DocumentModel)
+        self.assertTrue(admin.has_delete_permission(self.request, self.document))
+
+        self.record_signature()
+
+        self.assertFalse(admin.has_delete_permission(self.request, self.document))
+
+    def test_documents_are_not_created_from_the_admin(self):
+        """One created there would have no version: no file, nothing to sign."""
+        from chiffrement_app.models import Document as DocumentModel
+
+        self.assertFalse(
+            self.admin_for(DocumentModel).has_add_permission(self.request)
+        )
+
+
+class DocumentWithoutVersionTests(WebScopeTestCase):
+    """Un document sans version ne doit pas faire tomber la vérification."""
+
+    def test_verification_reports_rather_than_crashes(self):
+        from chiffrement_app.models import Document as DocumentModel
+        from chiffrement_app.services import verify_document
+
+        orphan = DocumentModel.objects.create(
+            title='Sans version', owner=self.owner, status='pending'
+        )
+        DocumentSigner.objects.create(document=orphan, user=self.alice)
+
+        report = verify_document(orphan)
+
+        self.assertIsNone(report['current_hash'])
+        self.assertEqual(report['version_number'], 0)
+        self.assertEqual(report['verdict'], 'incomplete')
+
+    def test_the_web_verification_page_still_renders(self):
+        from chiffrement_app.models import Document as DocumentModel
+
+        orphan = DocumentModel.objects.create(
+            title='Sans version 2', owner=self.owner, status='pending'
+        )
+
+        self.client.login(username='owner', password=DEFAULT_PASSWORD)
+        response = self.client.get(
+            reverse('chiffrement_app:verify_document',
+                    kwargs={'document_id': orphan.id})
+        )
+
+        self.assertEqual(response.status_code, 200)

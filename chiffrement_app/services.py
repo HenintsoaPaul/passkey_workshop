@@ -121,13 +121,22 @@ def recompute_document_status(document, save=True):
 
 
 def current_document_hash(document):
-    """Hash the file as it stands on disk right now.
+    """Hash the file as it stands on disk right now, or None if it cannot be.
 
     Not `document.file_hash`: the point of the check is to catch the case where
     the stored hash and the bytes no longer agree.
+
+    A document with no version has no file, and `document.file` is then None —
+    which used to raise past the except clause and turn a verification into a
+    500.
     """
+    version = document.current_version
+
+    if version is None or not version.file:
+        return None
+
     try:
-        return sha256_of_file(document.file)
+        return sha256_of_file(version.file)
     except (FileNotFoundError, ValueError, OSError):
         return None
 
@@ -245,10 +254,15 @@ def verify_document(document):
     # "Not signed yet" and "signed but broken" are different answers and must
     # not collapse into one: only a cryptographic failure makes a document
     # invalid, a merely unfinished one is incomplete.
-    compromised = (
-        any(not report['is_valid'] for report in signature_reports)
+    #
+    # There has to be a signature for one to be compromised. Without any, the
+    # document is unfinished whatever else is missing — a document with no
+    # version at all read as "invalid" before this, which suggests tampering
+    # where there is simply nothing yet.
+    compromised = bool(signatures) and (
+        any(report['is_valid'] is False for report in signature_reports)
         or not same_version
-        or (signatures and not hash_matches)
+        or not hash_matches
     )
 
     if all(check['passed'] for check in checks):

@@ -40,6 +40,26 @@ class DocumentAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at', 'due_date')
     inlines = [DocumentVersionInline]
 
+    def has_add_permission(self, request):
+        """Documents are created by uploading a file, never here.
+
+        A document created from the admin would have no version: no file, no
+        digest, nothing to sign. Use the upload page, which creates version 1
+        with the document.
+        """
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """An unused draft can go; anything signed is evidence and stays.
+
+        Deleting a Document cascades to its versions, signatures and log, so
+        this is the last gate in front of all of them.
+        """
+        if obj is None:
+            return True
+
+        return not obj.signatures.exists()
+
 
 @admin.register(DocumentVersion)
 class DocumentVersionAdmin(admin.ModelAdmin):
@@ -60,6 +80,11 @@ class DocumentVersionAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        # A version records what was signed. Removing one would leave its
+        # signatures describing content nobody can produce any more.
+        return False
+
 
 @admin.register(DocumentSigner)
 class DocumentSignerAdmin(admin.ModelAdmin):
@@ -74,6 +99,16 @@ class SignatureLogAdmin(admin.ModelAdmin):
     search_fields = ('document__title', 'user__username', 'details')
     list_filter = ('action', 'created_at')
     readonly_fields = ('document', 'action', 'user', 'details', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # An audit trail with a delete button is not an audit trail.
+        return False
 
 
 @admin.register(SigningKey)
@@ -117,6 +152,11 @@ class SignatureAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # §1: the system conserves signature information. A signature that can
+        # be deleted from an admin page was never really retained.
         return False
 
 
