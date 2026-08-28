@@ -173,6 +173,8 @@ class Document {
     required this.auditTrail,
     this.algorithm = 'SHA-256 with RSA-2048',
     this.fileSize,
+    this.versionNumber = 1,
+    this.versionCount = 1,
     this.canSign = false,
     this.hasSigned = false,
     this.isSigner = false,
@@ -193,6 +195,8 @@ class Document {
       folderPath: json['folderPath'] as String? ?? '/',
       algorithm: json['algorithm'] as String? ?? 'SHA-256 with RSA-2048',
       fileSize: json['fileSize'] as int?,
+      versionNumber: json['versionNumber'] as int? ?? 1,
+      versionCount: json['versionCount'] as int? ?? 1,
       canSign: json['canSign'] as bool? ?? false,
       hasSigned: json['hasSigned'] as bool? ?? false,
       isSigner: json['isSigner'] as bool? ?? false,
@@ -223,6 +227,16 @@ class Document {
   final List<AuditEvent> auditTrail;
   final String algorithm;
   final int? fileSize;
+
+  /// Which revision of the content this is. A new version invalidates every
+  /// signature made against the previous one (§2.5).
+  final int versionNumber;
+
+  /// How many revisions exist in total.
+  final int versionCount;
+
+  /// Whether this document has been revised since it was created.
+  bool get hasEarlierVersions => versionCount > 1;
 
   /// Whether the signed-in user may sign this document right now.
   final bool canSign;

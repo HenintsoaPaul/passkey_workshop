@@ -19,6 +19,8 @@ final Map<String, dynamic> documentJson = {
   'updatedAt': '2026-08-28T10:30:00+00:00',
   'dueDate': null,
   'folderPath': '/ documents / 2026 / 08 / 28',
+  'versionNumber': 2,
+  'versionCount': 2,
   'algorithm': 'SHA-256 with RSA-2048',
   'signerCount': 2,
   'signedCount': 1,
@@ -60,6 +62,8 @@ final Map<String, dynamic> verificationJson = {
   'documentId': '7',
   'verdict': 'invalid',
   'status': 'fully_signed',
+  'versionNumber': 3,
+  'versionCount': 3,
   'currentHash': 'aa' * 32,
   'storedHash': 'bb' * 32,
   'signedCount': 2,
@@ -103,6 +107,9 @@ void main() {
       expect(document.status, DocumentStatus.partiallySigned);
       expect(document.owner, 'Olivier Owner');
       expect(document.fileSize, 19);
+      expect(document.versionNumber, 2);
+      expect(document.versionCount, 2);
+      expect(document.hasEarlierVersions, isTrue);
       expect(document.canSign, isTrue);
       expect(document.hasSigned, isFalse);
       expect(document.isSigner, isTrue);
@@ -166,6 +173,9 @@ void main() {
       final document = Document.fromJson({'id': 3, 'title': 'Minimal'});
 
       expect(document.id, '3');
+      // A server that predates versioning is read as a single version.
+      expect(document.versionNumber, 1);
+      expect(document.hasEarlierVersions, isFalse);
       expect(document.signers, isEmpty);
       expect(document.auditTrail, isEmpty);
       expect(document.signatureProgress, 0);
@@ -182,6 +192,7 @@ void main() {
       expect(report.checks.first.passed, isTrue);
       expect(report.checks.last.passed, isFalse);
       expect(report.signatures.single.isValid, isTrue);
+      expect(report.versionNumber, 3);
     });
 
     test('explains an invalid verdict with the failing check detail', () {

@@ -105,6 +105,8 @@ class VerificationReport {
     required this.missingSigners,
     this.currentHash,
     this.storedHash,
+    this.versionNumber = 1,
+    this.versionCount = 1,
   });
 
   factory VerificationReport.fromJson(Map<String, dynamic> json) {
@@ -115,6 +117,8 @@ class VerificationReport {
       requiredCount: json['requiredCount'] as int? ?? 0,
       currentHash: json['currentHash'] as String?,
       storedHash: json['storedHash'] as String?,
+      versionNumber: json['versionNumber'] as int? ?? 1,
+      versionCount: json['versionCount'] as int? ?? 1,
       missingSigners: [
         for (final name in (json['missingSigners'] as List<dynamic>? ?? []))
           name as String,
@@ -136,6 +140,10 @@ class VerificationReport {
   final int requiredCount;
   final String? currentHash;
   final String? storedHash;
+
+  /// The revision these checks were run against.
+  final int versionNumber;
+  final int versionCount;
   final List<String> missingSigners;
   final List<VerificationCheck> checks;
   final List<SignatureReport> signatures;

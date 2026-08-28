@@ -185,6 +185,15 @@ class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
               tooltip: _document.fileHash,
             ),
 
+            if (_document.hasEarlierVersions) ...[
+              const SizedBox(height: AppSpacing.xs),
+              MetaRow(
+                label: 'Version',
+                value: '${_document.versionNumber} '
+                    '(sur ${_document.versionCount})',
+              ),
+            ],
+
             const SizedBox(height: AppSpacing.lg),
 
             SignatureProgress(
@@ -451,7 +460,9 @@ class _ConfirmSheet extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
 
             Text(
-              'Vous allez signer « ${document.title} » avec la clé privée de '
+              'Vous allez signer « ${document.title} »'
+              '${document.hasEarlierVersions ? ' (version '
+                  '${document.versionNumber})' : ''} avec la clé privée de '
               'cet appareil. Votre passkey sera demandée pour confirmer.',
               textAlign: TextAlign.center,
               style: AppTypography.bodyMd.copyWith(

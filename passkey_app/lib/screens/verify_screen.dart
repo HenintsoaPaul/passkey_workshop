@@ -565,6 +565,13 @@ class _TechnicalDetails extends StatelessWidget {
           const _DetailDivider(),
 
           _DetailEntry(
+            label: 'VERSION VÉRIFIÉE',
+            value: '${report.versionNumber} sur ${report.versionCount}',
+          ),
+
+          const _DetailDivider(),
+
+          _DetailEntry(
             label: 'EMPREINTE ACTUELLE',
             value: report.currentHash ?? 'illisible',
           ),
