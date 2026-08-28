@@ -12,7 +12,7 @@ class Api {
     String username,
   ) async {
     final response = await _post(
-      '/api/passkeys/register/options/',
+      '/chiffrement_app/register/options/',
       {
         'username': username,
       },
@@ -28,7 +28,7 @@ class Api {
     Map<String, dynamic> credential,
   ) async {
     final response = await _post(
-      '/api/passkeys/register/verify/',
+      '/chiffrement_app/register/verify/',
       {
         'username': username,
         'credential': credential,
@@ -44,7 +44,7 @@ class Api {
     String username,
   ) async {
     final response = await _post(
-      '/api/passkeys/login/options/',
+      '/chiffrement_app/login/options/',
       {
         'username': username,
       },
@@ -59,7 +59,7 @@ class Api {
     Map<String, dynamic> credential,
   ) async {
     final response = await _post(
-      '/api/passkeys/login/verify/',
+      '/chiffrement_app/login/verify/',
       {
         'credential': credential,
       },
