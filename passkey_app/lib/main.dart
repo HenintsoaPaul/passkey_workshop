@@ -28,7 +28,7 @@ class MyApp extends StatelessWidget {
       title: 'Passkey Signature App',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.light(),
-      home: PasskeyPage()
+      home: PasskeyPage(passkeyService: passkeyService)
     );
   }
 }

@@ -3,7 +3,9 @@ import 'package:passkey_app/api.dart';
 import 'package:passkey_app/passkey_service.dart';
 
 class PasskeyPage extends StatefulWidget {
-  const PasskeyPage({super.key});
+  const PasskeyPage({super.key, required this.passkeyService});
+
+  final PasskeyService passkeyService;
 
   @override
   State<PasskeyPage> createState() => _PasskeyPageState();
@@ -11,7 +13,6 @@ class PasskeyPage extends StatefulWidget {
 
 class _PasskeyPageState extends State<PasskeyPage> {
   final usernameController = TextEditingController();
-  final passkeyService = PasskeyService();
 
   String message = '';
   final List<String> logs = [];
@@ -35,7 +36,7 @@ class _PasskeyPageState extends State<PasskeyPage> {
       addLog('Registration options received');
 
       final credential =
-          await passkeyService.createPasskey(options);
+          await widget.passkeyService.createPasskey(options);
       addLog('Passkey created by Credential Manager');
 
       await Api.registerVerify(
@@ -67,7 +68,7 @@ class _PasskeyPageState extends State<PasskeyPage> {
       addLog('Login options received');
 
       final credential =
-          await passkeyService.authenticate(options);
+          await widget.passkeyService.authenticate(options);
       addLog('Passkey retrieved by Credential Manager');
 
       await Api.loginVerify(
