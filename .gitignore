@@ -1,7 +1,19 @@
-./.idea/**
-./django_signature_app/**
+# Python / Django
 __pycache__/
 *.pyc
+*.pyo
 db.sqlite3
+db.sqlite3-journal
 /documents/
 /signatures/
+/staticfiles/
+.env
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
