@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'app_config.dart';
+
 class Api {
 
   static String? _sessionCookie;
 
-  static const baseUrl = 'https://socks-aspects-cinema-continue.trycloudflare.com';
+  static String get baseUrl => AppConfig.apiBaseUrl;
 
   static Future<Map<String, dynamic>> registerOptions(
     String username,
