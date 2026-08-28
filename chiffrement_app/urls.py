@@ -22,4 +22,10 @@ urlpatterns = [
     path('profile/edit/', views.profile_edit, name='profile_edit'),
     path('users/', views.user_list, name='user_list'),
     path('user/<int:user_id>/', views.user_detail, name='user_detail'),
+
+    # Passkey
+    path('register/options/', views.register_options, name='passkey_register_options'),
+    path('register/verify/', views.register_verify, name='passkey_register_verify'),
+    path('login/options/', views.login_options, name='passkey_login_options'),
+    path('login/verify/', views.login_verify, name='passkey_login_verify'),
 ]

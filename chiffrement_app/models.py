@@ -129,3 +129,21 @@ class SignatureLog(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Journal de signature'
         verbose_name_plural = 'Journaux de signature'
+
+
+class Passkey(models.Model):
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='passkeys')
+    credential_id = models.BinaryField(unique=True)
+    public_key = models.BinaryField()
+    sign_count = models.PositiveBigIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} - passkey"
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Clé d'accès"
+        verbose_name_plural = "Clés d'accès"

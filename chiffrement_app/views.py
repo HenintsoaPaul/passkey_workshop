@@ -14,11 +14,31 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
 import hashlib
 import json
+import uuid
+import base64
 from datetime import timedelta
 
-from .models import Document, DocumentSigner, UserProfile, SignatureLog
+from webauthn import (
+    generate_registration_options,
+    verify_registration_response,
+    generate_authentication_options,
+    verify_authentication_response,
+    options_to_json,
+    base64url_to_bytes,
+)
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    AuthenticatorAttachment,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+    PublicKeyCredentialDescriptor,
+)
+
+from .models import Document, DocumentSigner, UserProfile, SignatureLog, Passkey
 
 # ============ Authentification ============
 
@@ -434,3 +454,159 @@ def user_detail(request, user_id):
         'is_own_profile': request.user == user_obj,
     }
     return render(request, 'users/detail.html', context)
+
+
+# ============ Passkeys ============
+
+RP_ID = settings.PASSKEY_HOST
+RP_NAME = settings.PASSKEY_RP_NAME
+ORIGIN = f'https://{settings.PASSKEY_HOST}'
+EXPECTED_ORIGINS = [
+    f'android:apk-key-hash:{settings.PASSKEY_APK_KEY_HASH}'
+]
+
+
+def assetlinks(request):
+    return JsonResponse([
+        {
+            'relation': [
+                'delegate_permission/common.handle_all_urls',
+                'delegate_permission/common.get_login_creds',
+            ],
+            'target': {
+                'namespace': 'android_app',
+                'package_name': settings.ANDROID_PACKAGE_NAME,
+                'sha256_cert_fingerprints': [
+                    settings.ANDROID_CERT_FINGERPRINT
+                ],
+            },
+        }
+    ], safe=False)
+
+
+@csrf_exempt
+def register_options(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    body = json.loads(request.body)
+    username = body['username']
+
+    user, _ = User.objects.get_or_create(username=username, defaults={'email': username})
+
+    options = generate_registration_options(
+        rp_id=RP_ID,
+        rp_name=RP_NAME,
+        user_id=uuid.uuid4().bytes,
+        user_name=user.username,
+        user_display_name=user.username,
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            authenticator_attachment=AuthenticatorAttachment.PLATFORM,
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.PREFERRED,
+        ),
+    )
+
+    request.session['registration_challenge'] = base64.urlsafe_b64encode(options.challenge).decode().rstrip('=')
+
+    return JsonResponse(json.loads(options_to_json(options)))
+
+
+@csrf_exempt
+def register_verify(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    body = json.loads(request.body)
+    username = body['username']
+    credential = body['credential']
+
+    user = User.objects.get(username=username)
+    challenge = base64.urlsafe_b64decode(request.session['registration_challenge'] + '==')
+
+    if not challenge:
+        return JsonResponse({'error': 'No registration ceremony'}, status=400)
+
+    verification = verify_registration_response(
+        credential=credential,
+        expected_challenge=challenge,
+        expected_rp_id=RP_ID,
+        expected_origin=EXPECTED_ORIGINS,
+        require_user_verification=False,
+    )
+
+    Passkey.objects.create(
+        user=user,
+        credential_id=verification.credential_id,
+        public_key=verification.credential_public_key,
+        sign_count=verification.sign_count,
+    )
+
+    del request.session['registration_challenge']
+
+    return JsonResponse({'success': True, 'username': username})
+
+
+@csrf_exempt
+def login_options(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    body = json.loads(request.body)
+    username = body['username']
+
+    user = User.objects.get(username=username)
+    passkeys = Passkey.objects.filter(user=user)
+
+    allow_credentials = [
+        PublicKeyCredentialDescriptor(id=bytes(pk.credential_id))
+        for pk in passkeys
+    ]
+
+    options = generate_authentication_options(
+        rp_id=RP_ID,
+        allow_credentials=allow_credentials,
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+
+    request.session['authentication_challenge'] = base64.urlsafe_b64encode(options.challenge).decode().rstrip('=')
+    request.session['authentication_user'] = user.id
+
+    return JsonResponse(json.loads(options_to_json(options)))
+
+
+@csrf_exempt
+def login_verify(request):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    body = json.loads(request.body)
+    credential = body['credential']
+
+    challenge = base64.urlsafe_b64decode(request.session['authentication_challenge'] + '==')
+    user_id = request.session.get('authentication_user')
+
+    if not challenge or not user_id:
+        return JsonResponse({'error': 'No authentication ceremony'}, status=400)
+
+    user = User.objects.get(id=user_id)
+    credential_id = base64url_to_bytes(credential['rawId'])
+    passkey = Passkey.objects.get(user=user, credential_id=credential_id)
+
+    verification = verify_authentication_response(
+        credential=credential,
+        expected_challenge=challenge,
+        expected_rp_id=RP_ID,
+        expected_origin=EXPECTED_ORIGINS,
+        credential_public_key=bytes(passkey.public_key),
+        credential_current_sign_count=passkey.sign_count,
+        require_user_verification=False,
+    )
+
+    passkey.sign_count = verification.new_sign_count
+    passkey.save(update_fields=['sign_count'])
+
+    del request.session['authentication_challenge']
+    del request.session['authentication_user']
+
+    return JsonResponse({'success': True, 'username': user.username})
