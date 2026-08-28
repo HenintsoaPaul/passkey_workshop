@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="fr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SignApp Passkey - Audit Trail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"secondary-fixed": "#dde1ff", "on-primary-container": "#460066", "tertiary-fixed-dim": "#ffb0ce", "on-tertiary-fixed": "#3e0022", "inverse-primary": "#921eca", primary: "#e8b3ff", secondary: "#c0c5e5", "on-secondary": "#292f48", error: "#ffb4ab", "primary-container": "#c961ff", "on-surface-variant": "#d2c1d5", "inverse-surface": "#e1e1ef", "on-surface": "#e1e1ef", "primary-fixed-dim": "#e8b3ff", "surface-bright": "#373943", "inverse-on-surface": "#2e303a", "surface-dim": "#11131c", "surface-tint": "#e8b3ff", "on-primary": "#500074", "surface-container-lowest": "#0c0e17", "tertiary-container": "#f750a4", background: "#11131c", "tertiary-fixed": "#ffd9e5", "outline-variant": "#4f4353", "on-tertiary": "#63003b", "on-tertiary-container": "#570033", "on-error": "#690005", "on-primary-fixed-variant": "#7200a3", "surface-container": "#1d1f29", "error-container": "#93000a", "surface-container-high": "#282933", "surface-container-highest": "#32343e", surface: "#11131c", "secondary-container": "#404560", "primary-fixed": "#f6d9ff", "on-tertiary-fixed-variant": "#8c0055", "on-secondary-fixed": "#141a32", "on-background": "#e1e1ef", "surface-container-low": "#191b24", "on-primary-fixed": "#310049", outline: "#9b8c9e", tertiary: "#ffb0ce", "surface-variant": "#32343e", "on-secondary-fixed-variant": "#404560", "on-secondary-container": "#aeb4d3", "secondary-fixed-dim": "#c0c5e5", "on-error-container": "#ffdad6"}, borderRadius: {DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px"}, spacing: {base: "4px", "margin-mobile": "16px", sm: "8px", xs: "4px", xl: "32px", md: "16px", "gutter-mobile": "12px", lg: "24px"}, fontFamily: {"body-md": ["Hanken Grotesk"], button: ["Hanken Grotesk"], "label-md": ["JetBrains Mono"], "body-lg": ["Hanken Grotesk"], "label-sm": ["JetBrains Mono"], "headline-md": ["Hanken Grotesk"], "headline-sm": ["Hanken Grotesk"], "headline-lg": ["Hanken Grotesk"], headline: ["Hanken Grotesk"], display: ["Hanken Grotesk"], body: ["Hanken Grotesk"], label: ["Hanken Grotesk"]}, fontSize: {"body-md": ["14px", {lineHeight: "20px", fontWeight: "400"}], button: ["16px", {lineHeight: "20px", fontWeight: "600"}], "label-md": ["12px", {lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "500"}], "body-lg": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-sm": ["10px", {lineHeight: "14px", letterSpacing: "0.05em", fontWeight: "500"}], "headline-md": ["22px", {lineHeight: "28px", letterSpacing: "-0.01em", fontWeight: "600"}], "headline-sm": ["18px", {lineHeight: "24px", fontWeight: "600"}], "headline-lg": ["28px", {lineHeight: "34px", letterSpacing: "-0.02em", fontWeight: "700"}]}}}};</script>
+<style>
+        body { background-color: theme('colors.background'); color: theme('colors.on-background'); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="antialiased min-h-screen flex flex-col pt-16 md:pt-0 md:pl-64">
+<!-- TopAppBar Mobile -->
+<header class="md:hidden fixed top-0 w-full z-50 bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant flex justify-between items-center h-16 px-margin-mobile w-full transition-colors duration-200">
+<div class="flex items-center gap-sm text-primary dark:text-primary">
+<span class="material-symbols-outlined" data-icon="security" data-weight="fill">security</span>
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary">SignApp Passkey</span>
+</div>
+<div class="w-8 h-8 rounded-full overflow-hidden bg-surface-container-high border border-outline-variant">
+<img alt="User profile photo" class="w-full h-full object-cover" data-alt="A professional headshot of a corporate executive in a dark, high-end environment with subtle purple lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAM9v5inGTMhs8DFNX6Ii8atF2P-utDrPDOmOfg5MwBf5ZfNyJKkaUZv05YdN1bJsiNROxOxWDuu30w3RTYegLPhXapnD50atlswos_nl5zG0VogX3iLMXqz_wHJF5nqaclZoEQ7Yzll2JJDa3fu2v-yC3XPmqpj5bthiv90tYVGyLv7bsnduo4ODv0ljBjFiXoILSVTqjbr1CCx0uu2biiNL2eW46JjOH3zT3YzzkHVN0A-k9tQwLR"/>
+</div>
+</header>
+<!-- SideNav Desktop (Simulated TopNav cluster for Web) -->
+<nav class="hidden md:flex flex-col fixed left-0 top-0 h-full w-64 bg-surface-container border-r border-outline-variant z-50 p-lg">
+<div class="flex items-center gap-sm mb-xl text-primary">
+<span class="material-symbols-outlined text-[32px]" data-icon="security" data-weight="fill">security</span>
+<span class="font-headline-lg text-headline-lg font-bold">SignApp</span>
+</div>
+<div class="flex flex-col gap-sm">
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-button text-button">Dashboard</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-button text-button">Documents</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg bg-primary-container text-on-primary-container transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+<span class="font-button text-button">Verify</span>
+</a>
+<a class="flex items-center gap-md p-md rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-button text-button">Settings</span>
+</a>
+</div>
+</nav>
+<!-- Main Canvas -->
+<main class="flex-1 p-margin-mobile md:p-lg lg:p-xl max-w-5xl mx-auto w-full pb-24 md:pb-lg">
+<!-- Header Section -->
+<div class="mb-lg">
+<div class="flex items-center gap-sm mb-xs">
+<span class="material-symbols-outlined text-outline" data-icon="arrow_back">arrow_back</span>
+<span class="font-label-md text-label-md text-outline tracking-widest uppercase">BACK TO DOCUMENTS</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg mb-sm">Audit &amp; Verification</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Confidential Contract - Q3 Tech Merger.pdf</p>
+</div>
+<!-- Verification Status Banner -->
+<div class="bg-[#1A1D2D] border border-outline-variant rounded-xl p-md md:p-lg mb-lg flex flex-col md:flex-row items-center gap-md relative overflow-hidden">
+<div class="absolute inset-0 opacity-10 bg-gradient-to-r from-[#10B981] to-transparent pointer-events-none"></div>
+<div class="w-16 h-16 rounded-full bg-[#10B981]/20 border border-[#10B981]/50 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[32px] text-[#10B981]" data-icon="check_circle" data-weight="fill">check_circle</span>
+</div>
+<div class="flex-1 text-center md:text-left z-10">
+<h2 class="font-headline-sm text-headline-sm text-[#10B981] mb-xs flex items-center justify-center md:justify-start gap-xs">
+                    Document Valide
+                    <span class="material-symbols-outlined text-[16px]" data-icon="verified">verified</span>
+</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Signature Authentifiée. All cryptographic seals are intact and mathematically verified against the ledger.</p>
+</div>
+<div class="flex flex-col gap-xs z-10 w-full md:w-auto">
+<div class="bg-surface-container p-sm rounded-lg border border-outline-variant">
+<div class="font-label-sm text-label-sm text-outline mb-1">HASH VERIFICATION</div>
+<div class="font-label-md text-label-md text-primary truncate max-w-[200px]">0x7F4B...9A2C</div>
+</div>
+</div>
+</div>
+<!-- Audit Trail Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-md lg:gap-lg">
+<!-- Timeline (Journal d'audit) -->
+<div class="lg:col-span-2 space-y-md">
+<h3 class="font-headline-sm text-headline-sm flex items-center gap-sm">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+                    Journal d'audit
+                </h3>
+<div class="bg-[#1A1D2D] border border-outline-variant rounded-xl p-md">
+<!-- Timeline Item 1 -->
+<div class="relative pl-8 pb-lg border-l border-outline-variant ml-4">
+<div class="absolute w-3 h-3 bg-primary rounded-full -left-[6.5px] top-1"></div>
+<div class="flex flex-col md:flex-row md:justify-between md:items-start gap-sm mb-sm">
+<div>
+<h4 class="font-button text-button">Document Signed</h4>
+<p class="font-body-md text-body-md text-on-surface-variant">Biometric Passkey Authentication Successful</p>
+</div>
+<div class="font-label-sm text-label-sm text-outline whitespace-nowrap">
+                                OCT 24, 2023 • 14:32:05 UTC
+                            </div>
+</div>
+<div class="flex items-center gap-sm bg-surface-container p-sm rounded border border-outline-variant inline-flex">
+<span class="material-symbols-outlined text-[16px] text-primary" data-icon="fingerprint">fingerprint</span>
+<span class="font-label-md text-label-md">Eleanor Vance (CEO)</span>
+</div>
+</div>
+<!-- Timeline Item 2 -->
+<div class="relative pl-8 pb-lg border-l border-outline-variant ml-4">
+<div class="absolute w-3 h-3 bg-outline rounded-full -left-[6.5px] top-1"></div>
+<div class="flex flex-col md:flex-row md:justify-between md:items-start gap-sm mb-sm">
+<div>
+<h4 class="font-button text-button text-on-surface-variant">Document Viewed</h4>
+<p class="font-body-md text-body-md text-outline">Secure link accessed via IP 192.168.1.45</p>
+</div>
+<div class="font-label-sm text-label-sm text-outline whitespace-nowrap">
+                                OCT 24, 2023 • 14:15:22 UTC
+                            </div>
+</div>
+<div class="flex items-center gap-sm bg-surface-container p-sm rounded border border-outline-variant inline-flex opacity-70">
+<span class="material-symbols-outlined text-[16px]" data-icon="visibility">visibility</span>
+<span class="font-label-md text-label-md">Eleanor Vance (CEO)</span>
+</div>
+</div>
+<!-- Timeline Item 3 (Last) -->
+<div class="relative pl-8 ml-4">
+<div class="absolute w-3 h-3 bg-outline rounded-full -left-[6.5px] top-1"></div>
+<div class="flex flex-col md:flex-row md:justify-between md:items-start gap-sm mb-sm">
+<div>
+<h4 class="font-button text-button text-on-surface-variant">Document Created</h4>
+<p class="font-body-md text-body-md text-outline">Uploaded and initialized for signing</p>
+</div>
+<div class="font-label-sm text-label-sm text-outline whitespace-nowrap">
+                                OCT 23, 2023 • 09:00:11 UTC
+                            </div>
+</div>
+<div class="flex items-center gap-sm bg-surface-container p-sm rounded border border-outline-variant inline-flex opacity-70">
+<span class="material-symbols-outlined text-[16px]" data-icon="upload_file">upload_file</span>
+<span class="font-label-md text-label-md">System Admin</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Technical Details Side Panel -->
+<div class="space-y-md">
+<h3 class="font-headline-sm text-headline-sm flex items-center gap-sm">
+<span class="material-symbols-outlined" data-icon="info">info</span>
+                    Technical Details
+                </h3>
+<div class="bg-[#1A1D2D] border border-outline-variant rounded-xl p-md flex flex-col gap-md">
+<div>
+<div class="font-label-sm text-label-sm text-outline mb-xs">DOCUMENT ID</div>
+<div class="font-label-md text-label-md break-all">DOC-88392-XYZ-2023</div>
+</div>
+<div class="h-px bg-outline-variant w-full"></div>
+<div>
+<div class="font-label-sm text-label-sm text-outline mb-xs">ALGORITHM</div>
+<div class="font-label-md text-label-md">SHA-256 with RSA-2048</div>
+</div>
+<div class="h-px bg-outline-variant w-full"></div>
+<div>
+<div class="font-label-sm text-label-sm text-outline mb-xs">LOCATION / IP</div>
+<div class="font-label-md text-label-md">48.8566° N, 2.3522° E (Paris, FR)</div>
+</div>
+<button class="w-full mt-sm py-sm px-md border border-primary text-primary rounded-full font-button text-button hover:bg-primary/10 transition-colors flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined text-[20px]" data-icon="download">download</span>
+                        Download Audit Report
+                    </button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar Mobile -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface-container dark:bg-surface-container border-t border-outline-variant dark:border-outline-variant flex justify-around items-center h-20 pb-safe px-sm w-full">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-md text-label-md mt-1">Dashboard</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+<span class="font-label-md text-label-md mt-1">Documents</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-5 py-1 hover:text-primary scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+<span class="font-label-md text-label-md mt-1">Verify</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-md text-label-md mt-1">Settings</span>
+</a>
+</nav>
+</body></html>
