@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% block title %}Mon Profil - Signature Électronique{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card-custom p-4 p-md-5">
+            <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold fs-2" style="width: 72px; height: 72px; background: linear-gradient(135deg, var(--token-primary) 0%, var(--token-secondary) 100%); border: 2px solid var(--token-accent-indigo);">
+                        {{ user.username|slice:":1"|upper }}
+                    </div>
+                    <div>
+                        <h2 class="h3 fw-bold mb-1 text-white">{{ profile.name|default:user.username }}</h2>
+                        <span class="badge px-3 py-1 rounded-pill" style="background: rgba(165, 180, 252, 0.18); color: var(--token-accent-indigo); border: 1px solid rgba(165, 180, 252, 0.3);">
+                            @{{ user.username }}
+                        </span>
+                    </div>
+                </div>
+                <a href="{% url 'chiffrement_app:profile_edit' %}" class="btn btn-gradient-primary">
+                    <i class="fa-solid fa-pen-to-square me-2"></i>Éditer le profil
+                </a>
+            </div>
+
+            <!-- Stats grid -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small fw-medium d-block mb-1">Documents Déposés</span>
+                        <span class="h3 fw-bold" style="color: var(--token-accent-indigo);">{{ documents_count }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small fw-medium d-block mb-1">Signatures Effectuées</span>
+                        <span class="h3 fw-bold" style="color: var(--token-accent-pink);">{{ signatures_count }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Information Details -->
+            <h5 class="fw-bold mb-3 text-white"><i class="fa-solid fa-id-card me-2" style="color: var(--token-accent-indigo);"></i>Informations</h5>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small d-block mb-1">Email</span>
+                        <span class="fw-semibold text-white">{{ profile.email|default:user.email|default:"--" }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small d-block mb-1">Téléphone</span>
+                        <span class="fw-semibold text-white">{{ profile.phone|default:"--" }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small d-block mb-1">Organisation / Entreprise</span>
+                        <span class="fw-semibold text-white">{{ profile.organization|default:"--" }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small d-block mb-1">Poste / Fonction</span>
+                        <span class="fw-semibold text-white">{{ profile.job_title|default:"--" }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small d-block mb-1">Adresse</span>
+                        <span class="fw-semibold text-white">{{ profile.address|default:"--" }}</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small d-block mb-1">Ville</span>
+                        <span class="fw-semibold text-white">{{ profile.city|default:"--" }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if profile.bio %}
+                <div class="mb-4">
+                    <h5 class="fw-bold mb-2 text-white">Biographie</h5>
+                    <p class="text-token-secondary p-3 border rounded-3 mb-0" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        {{ profile.bio }}
+                    </p>
+                </div>
+            {% endif %}
+
+            <!-- Image de Signature Numérique -->
+            <div class="mb-4">
+                <h5 class="fw-bold mb-3 text-white"><i class="fa-solid fa-signature me-2" style="color: var(--token-accent-pink);"></i>Signature Numérique</h5> Enregistrée
+                <div class="p-4 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                    {% if profile.signature_image %}
+                        <img src="{{ profile.signature_image.url }}" alt="Signature Numérique" class="img-fluid bg-white p-3 rounded" style="max-height: 120px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.15));">
+                        <span class="small d-block mt-2 fw-semibold" style="color: var(--token-success);"><i class="fa-solid fa-circle-check me-1"></i>Image de signature active</span>
+                    {% else %}
+                        <i class="fa-solid fa-file-signature fs-1 mb-2 opacity-50" style="color: var(--token-text-muted);"></i>
+                        <p class="text-token-muted small mb-0">Aucune image de signature enregistrée pour l'instant.</p>
+                        <a href="{% url 'chiffrement_app:profile_edit' %}" class="btn btn-sm btn-outline-custom mt-3">Ajouter une signature</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

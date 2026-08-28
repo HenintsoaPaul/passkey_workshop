@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Vérification Cryptographique - {{ document.title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card-custom p-4 p-md-5">
+            <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 56px; height: 56px; background: rgba(56, 189, 248, 0.15);">
+                        <i class="fa-solid fa-certificate fs-2" style="color: var(--token-info);"></i>
+                    </div>
+                    <div>
+                        <h2 class="h3 fw-bold mb-1 text-white">Certificat de Vérification</h2>
+                        <p class="text-token-muted small mb-0">Contrôle d'intégrité du fichier et authentification des signatures</p>
+                    </div>
+                </div>
+
+                <a href="{% url 'chiffrement_app:document_detail' document_id=document.id %}" class="btn btn-outline-custom">
+                    <i class="fa-solid fa-arrow-left me-1"></i>Retour au document
+                </a>
+            </div>
+
+            <!-- Status Integrity Card -->
+            <div class="p-4 border rounded-3 text-center mb-4" style="background: {% if is_valid %}rgba(52, 211, 153, 0.12){% else %}rgba(248, 113, 113, 0.12){% endif %}; border-color: {% if is_valid %}var(--token-success){% else %}var(--token-danger){% endif %} !important;">
+                {% if is_valid %}
+                    <i class="fa-solid fa-circle-check fs-1 mb-2" style="color: var(--token-success);"></i>
+                    <h3 class="h4 fw-bold text-white mb-1">DOCUMENT AUTHENTIQUE ET NON ALTÉRÉ</h3>
+                    <p class="text-token-secondary small mb-0">Le hash SHA-256 recalculé correspond exactement au hash enregistré lors du dépôt du document.</p>
+                {% else %}
+                    <i class="fa-solid fa-triangle-exclamation fs-1 mb-2" style="color: var(--token-danger);"></i>
+                    <h3 class="h4 fw-bold text-white mb-1">AVERTISSEMENT D'ALTÉRATION</h3>
+                    <p class="text-token-secondary small mb-0">Le hash du fichier ne correspond pas au hash original enregisté. Le document a pu être modifié ou corrompu.</p>
+                {% endif %}
+            </div>
+
+            <!-- Technical Hash Check Details -->
+            <div class="mb-4">
+                <h5 class="fw-bold text-white mb-3"><i class="fa-solid fa-fingerprint me-2" style="color: var(--token-accent-indigo);"></i>Informations de Chiffrement SHA-256</h5>
+                
+                <div class="p-3 border rounded-3 mb-2" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                    <span class="text-token-muted small d-block mb-1">Hash SHA-256 Enregistré</span>
+                    <code class="text-token-accent small text-break">{{ document.file_hash }}</code>
+                </div>
+
+                <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                    <span class="text-token-muted small d-block mb-1">Hash SHA-256 Recalculé (En direct)</span>
+                    <code class="{% if is_valid %}text-success{% else %}text-danger{% endif %} small text-break">{{ current_hash }}</code>
+                </div>
+            </div>
+
+            <!-- Signatures Summary -->
+            <div class="mb-4">
+                <h5 class="fw-bold text-white mb-3"><i class="fa-solid fa-user-check me-2" style="color: var(--token-accent-indigo);"></i>Signataires Certifiés</h5>
+                <div class="list-group">
+                    {% for s in signers %}
+                        <div class="list-group-item text-white d-flex align-items-center justify-content-between p-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                            <div>
+                                <span class="fw-bold d-block text-white">{{ s.user.profile.name|default:s.user.username }}</span>
+                                <span class="text-token-muted small">{{ s.user.profile.organization|default:s.user.email }}</span>
+                            </div>
+                            <div class="text-end">
+                                {% if s.signature_status == 'signed' %}
+                                    <span class="badge badge-status badge-signed mb-1"><i class="fa-solid fa-circle-check me-1"></i>Signé</span>
+                                    <span class="text-token-muted small d-block">{{ s.signature_date|date:"d/m/Y H:i:s" }}</span>
+                                {% else %}
+                                    <span class="badge badge-status badge-pending">Non signé</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="list-group-item text-token-muted text-center py-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                            Aucun signataire rattaché.
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Print / Export Proof Button -->
+            <div class="text-end pt-3 border-top" style="border-color: var(--token-border) !important;">
+                <button type="button" class="btn btn-outline-custom me-2" onclick="window.print();">
+                    <i class="fa-solid fa-print me-1"></i>Imprimer le certificat
+                </button>
+                <a href="{% url 'chiffrement_app:document_detail' document_id=document.id %}" class="btn btn-gradient-primary">
+                    <i class="fa-solid fa-check me-1"></i>Terminer
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

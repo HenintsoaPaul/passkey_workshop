@@ -14,7 +14,7 @@ class Document(models.Model):
         ('archived', 'Archivé'),
     ]
 
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
     file = models.FileField(upload_to='documents/%Y/%m/%d/')
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='documents')
@@ -57,9 +57,12 @@ class UserProfile(models.Model):
     name = models.CharField(max_length=255, null=False)
     email = models.EmailField(null=False)
     phone = models.CharField(max_length=20, blank=True, null=True)
+    organization = models.CharField(max_length=255, blank=True, null=True)
+    job_title = models.CharField(max_length=255, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     city = models.CharField(max_length=100, blank=True, null=True)
-    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    signature_image = models.ImageField(upload_to='signatures/', blank=True, null=True)
+    bio = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -93,9 +96,36 @@ class DocumentSigner(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return self.user.username
+        return f"{self.user.username} - {self.signature_status}"
 
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Signataire'
         verbose_name_plural = 'Signataires'
+
+
+class SignatureLog(models.Model):
+
+    ACTION_CHOICES = [
+        ('created', 'Créé'),
+        ('viewed', 'Vu'),
+        ('accepted', 'Accepté'),
+        ('signed', 'Signé'),
+        ('rejected', 'Rejeté'),
+    ]
+
+    document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='logs')
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signature_logs')
+    details = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.action}"
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Journal de signature'
+        verbose_name_plural = 'Journaux de signature'

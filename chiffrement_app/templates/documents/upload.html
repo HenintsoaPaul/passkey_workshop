@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}Téléverser un document - Signature Électronique{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card-custom p-4 p-md-5">
+            <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px; background: rgba(165, 180, 252, 0.15);">
+                    <i class="fa-solid fa-file-circle-plus fs-3" style="color: var(--token-accent-indigo);"></i>
+                </div>
+                <div>
+                    <h2 class="h3 fw-bold mb-1 text-white">Nouveau Document</h2>
+                    <p class="text-token-muted small mb-0">Déposez un nouveau document et affectez les signataires</p>
+                </div>
+            </div>
+
+            {% if error %}
+                <div class="alert alert-danger border-0 shadow-sm mb-4">
+                    <i class="fa-solid fa-circle-exclamation me-2"></i>{{ error }}
+                </div>
+            {% endif %}
+
+            <form method="POST" action="{% url 'chiffrement_app:upload_document' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <!-- Titre du document -->
+                <div class="mb-4">
+                    <label for="title" class="form-label">Titre du document *</label>
+                    <div class="input-group">
+                        <span class="input-group-text border-end-0 text-token-muted" style="background: var(--token-bg-input); border-color: var(--token-border-strong);">
+                            <i class="fa-solid fa-heading"></i>
+                        </span>
+                        <input type="text" class="form-control form-control-custom border-start-0 ps-0" id="title" name="title" placeholder="ex: Contrat de prestation de service 2026.pdf" required>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div class="mb-4">
+                    <label for="description" class="form-label">Description / Notes</label>
+                    <textarea class="form-control form-control-custom" id="description" name="description" rows="3" placeholder="Renseignez ici des indications ou le contexte du document..."></textarea>
+                </div>
+
+                <!-- Fichier à joindre -->
+                <div class="mb-4">
+                    <label for="file" class="form-label">Fichier du document *</label>
+                    <div class="p-4 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border-strong) !important;">
+                        <input type="file" class="form-control form-control-custom mb-2" id="file" name="file" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg" required>
+                        <span class="text-token-muted small d-block">Formats supportés : PDF, DOCX, TXT, PNG, JPG (Taille max recommandée : 10 Mo)</span>
+                    </div>
+                </div>
+
+                <!-- Affectation des Signataires -->
+                <div class="mb-4">
+                    <label class="form-label d-block">Affecter des Signataires (Optionnel)</label>
+                    <div class="p-3 border rounded-3 overflow-auto" style="max-height: 220px; background: var(--token-bg-surface); border-color: var(--token-border-strong) !important;">
+                        {% if available_users %}
+                            <div class="row g-2">
+                                {% for u in available_users %}
+                                    <div class="col-12 col-md-6">
+                                        <div class="form-check p-2 rounded d-flex align-items-center gap-2" style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--token-border);">
+                                            <input class="form-check-input ms-0 me-2" type="checkbox" name="signers" value="{{ u.id }}" id="signer_{{ u.id }}">
+                                            <label class="form-check-label text-white small fw-medium w-100 cursor-pointer" for="signer_{{ u.id }}">
+                                                <span class="d-block fw-semibold">{{ u.profile.name|default:u.username }}</span>
+                                                <span class="text-token-muted small d-block">{{ u.profile.organization|default:u.email }}</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p class="text-token-muted small mb-0 text-center py-3">Aucun autre utilisateur disponible pour l'instant.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Date limite -->
+                <div class="mb-4">
+                    <label for="due_date" class="form-label">Date limite de signature (Optionnel)</label>
+                    <div class="input-group">
+                        <span class="input-group-text border-end-0 text-token-muted" style="background: var(--token-bg-input); border-color: var(--token-border-strong);">
+                            <i class="fa-solid fa-calendar-days"></i>
+                        </span>
+                        <input type="datetime-local" class="form-control form-control-custom border-start-0 ps-0" id="due_date" name="due_date">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex align-items-center justify-content-end gap-3 pt-3 border-top" style="border-color: var(--token-border) !important;">
+                    <a href="{% url 'chiffrement_app:dashboard' %}" class="btn btn-outline-custom">
+                        <i class="fa-solid fa-xmark me-2"></i>Annuler
+                    </a>
+                    <button type="submit" class="btn btn-gradient-primary">
+                        <i class="fa-solid fa-cloud-arrow-up me-2"></i>Téléverser et démarrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

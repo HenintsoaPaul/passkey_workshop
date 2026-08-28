@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ document.title }} - Suivi des Signatures{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-12 col-lg-10">
+        <!-- Header Card -->
+        <div class="card-custom p-4 p-md-5 mb-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <h1 class="h3 fw-bold text-white mb-0">{{ document.title }}</h1>
+                        {% if document.status == 'draft' %}
+                            <span class="badge badge-status badge-draft">Brouillon</span>
+                        {% elif document.status == 'pending' %}
+                            <span class="badge badge-status badge-pending">En attente</span>
+                        {% elif document.status == 'partially_signed' %}
+                            <span class="badge badge-status badge-partially">Partiellement signé</span>
+                        {% elif document.status == 'fully_signed' %}
+                            <span class="badge badge-status badge-signed">Complètement signé</span>
+                        {% else %}
+                            <span class="badge badge-status badge-archived">Archivé</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-token-muted small mb-0">
+                        <i class="fa-solid fa-user me-1 text-token-accent"></i>Propriétaire: <strong class="text-white">{{ document.owner.username }}</strong> &bull; 
+                        <i class="fa-solid fa-calendar me-1 text-token-accent"></i>Déposé le: {{ document.created_at|date:"d F Y à H:i" }}
+                    </p>
+                </div>
+
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <a href="{% url 'chiffrement_app:verify_document' document_id=document.id %}" class="btn btn-sm btn-outline-custom">
+                        <i class="fa-solid fa-shield-halved me-1 text-success"></i>Vérifier l'intégrité
+                    </a>
+                    
+                    {% if is_owner and document.status != 'archived' %}
+                        <button type="button" class="btn btn-sm btn-outline-custom" data-bs-toggle="modal" data-bs-target="#assignModal">
+                            <i class="fa-solid fa-user-plus me-1" style="color: var(--token-accent-indigo);"></i>Gérer les signataires
+                        </button>
+
+                        <a href="{% url 'chiffrement_app:archive_document' document_id=document.id %}" class="btn btn-sm btn-outline-custom" onclick="return confirm('Archiver ce document ?');">
+                            <i class="fa-solid fa-box-archive me-1 text-warning"></i>Archiver
+                        </a>
+                    {% endif %}
+
+                    {% if document.file %}
+                        <a href="{{ document.file.url }}" class="btn btn-sm btn-gradient-primary" download>
+                            <i class="fa-solid fa-download me-1"></i>Télécharger
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Description & Integrity Info -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-8">
+                    <div class="p-3 border rounded-3 h-100" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small fw-semibold text-uppercase d-block mb-1">Description</span>
+                        <p class="text-token-secondary mb-0">{{ document.description|default:"Aucune description fournie pour ce document." }}</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded-3 h-100" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                        <span class="text-token-muted small fw-semibold text-uppercase d-block mb-1">Empreinte SHA-256</span>
+                        <code class="text-token-accent small d-block text-break">{{ document.file_hash|default:"Non calculée" }}</code>
+                        {% if document.due_date %}
+                            <span class="text-token-muted small d-block mt-2">
+                                <i class="fa-solid fa-clock me-1 text-warning"></i>Limite: {{ document.due_date|date:"d/m/Y H:i" }}
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signature Action Banner (If user needs to sign) -->
+            {% if user_signer and user_signer.signature_status != 'signed' and document.status != 'archived' %}
+                <div class="p-4 border rounded-3 mb-4 text-center" style="background: rgba(99, 102, 241, 0.12); border-color: var(--token-border-strong) !important;">
+                    <i class="fa-solid fa-signature fs-2 mb-2" style="color: var(--token-accent-pink);"></i>
+                    <h4 class="h5 fw-bold text-white mb-2">Votre signature est requise sur ce document</h4>
+                    <p class="text-token-muted small mb-3">En cliquant sur le bouton ci-dessous, vous apposerez votre signature numérique officielle.</p>
+                    
+                    <form method="POST" action="{% url 'chiffrement_app:sign_document' document_id=document.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-gradient-primary px-4 py-2">
+                            <i class="fa-solid fa-pen-nib me-2"></i>Signer le document maintenant
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
+
+            <!-- Signature Progress Bar -->
+            <div class="mb-5">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="fw-bold text-white mb-0">
+                        <i class="fa-solid fa-chart-line me-2" style="color: var(--token-accent-indigo);"></i>Progression des Signatures
+                    </h5>
+                    <span class="fw-bold" style="color: var(--token-accent-indigo);">{{ signed_count }} sur {{ total_signers }} signé(s) ({{ progress_pct }}%)</span>
+                </div>
+                <div class="progress rounded-pill style-progress" style="height: 12px; background: rgba(255,255,255,0.08);">
+                    <div class="progress-bar rounded-pill" role="progressbar" style="width: {{ progress_pct }}%; background: linear-gradient(90deg, var(--token-primary) 0%, var(--token-success) 100%);" aria-valuenow="{{ progress_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+            </div>
+
+            <!-- Signers List -->
+            <div class="mb-5">
+                <h5 class="fw-bold text-white mb-3">
+                    <i class="fa-solid fa-users me-2" style="color: var(--token-accent-indigo);"></i>Signataires Affectés ({{ total_signers }})
+                </h5>
+
+                {% if signers %}
+                    <div class="row g-3">
+                        {% for s in signers %}
+                            <div class="col-12 col-md-6">
+                                <div class="p-3 border rounded-3 d-flex align-items-center justify-content-between" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold fs-5" style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--token-primary) 0%, var(--token-secondary) 100%);">
+                                            {{ s.user.username|slice:":1"|upper }}
+                                        </div>
+                                        <div>
+                                            <h6 class="fw-bold mb-0 text-white">{{ s.user.profile.name|default:s.user.username }}</h6>
+                                            <span class="text-token-muted small d-block">{{ s.user.profile.organization|default:s.user.email }}</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="text-end">
+                                        {% if s.signature_status == 'signed' %}
+                                            <span class="badge badge-status badge-signed mb-1">Signé</span>
+                                            <span class="text-token-muted small d-block" style="font-size: 0.75rem;">{{ s.signature_date|date:"d/m/Y H:i" }}</span>
+                                        {% elif s.signature_status == 'viewed' %}
+                                            <span class="badge badge-status badge-partially">Consulté</span>
+                                        {% else %}
+                                            <span class="badge badge-status badge-pending">En attente</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-token-muted small mb-0 p-4 border rounded-3 text-center" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                        Aucun signataire affecté à ce document pour l'instant.
+                    </p>
+                {% endif %}
+            </div>
+
+            <!-- Audit Logs / Historique -->
+            <div>
+                <h5 class="fw-bold text-white mb-3">
+                    <i class="fa-solid fa-clock-rotate-left me-2" style="color: var(--token-accent-pink);"></i>Journal d'Audit & Traçabilité
+                </h5>
+
+                <div class="table-responsive">
+                    <table class="table table-custom align-middle bg-transparent mb-0">
+                        <thead>
+                            <tr>
+                                <th>Horodatage</th>
+                                <th>Utilisateur</th>
+                                <th>Action</th>
+                                <th>Détails</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs %}
+                                <tr>
+                                    <td class="text-token-muted small">{{ log.created_at|date:"d/m/Y H:i:s" }}</td>
+                                    <td class="fw-semibold text-white">{{ log.user.username }}</td>
+                                    <td>
+                                        {% if log.action == 'signed' %}
+                                            <span class="badge badge-status badge-signed">Signature</span>
+                                        {% elif log.action == 'viewed' %}
+                                            <span class="badge badge-status badge-partially">Consultation</span>
+                                        {% else %}
+                                            <span class="badge badge-status badge-draft">{{ log.action }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-token-secondary small">{{ log.details }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-token-muted py-3">Aucun événement enregistré.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Gérer les Signataires -->
+{% if is_owner %}
+    <div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-white" style="background: var(--token-bg-surface); border: 1px solid var(--token-border-strong);">
+                <div class="modal-header border-bottom" style="border-color: var(--token-border) !important;">
+                    <h5 class="modal-header-title fw-bold mb-0">Affecter / Modifier les Signataires</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <form method="POST" action="{% url 'chiffrement_app:assign_signers' document_id=document.id %}">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <label class="form-label d-block mb-3">Sélectionnez les utilisateurs autorisés à signer :</label>
+                        <div class="overflow-auto" style="max-height: 250px;">
+                            {% for u in available_users %}
+                                <div class="form-check p-2 rounded mb-2 d-flex align-items-center gap-2" style="background: rgba(255,255,255,0.04); border: 1px solid var(--token-border);">
+                                    <input class="form-check-input ms-0 me-2" type="checkbox" name="signers" value="{{ u.id }}" id="modal_signer_{{ u.id }}"
+                                        {% if u in document.signers.all %}checked{% endif %}>
+                                    <label class="form-check-label text-white small fw-medium w-100 cursor-pointer" for="modal_signer_{{ u.id }}">
+                                        <span class="d-block fw-semibold">{{ u.profile.name|default:u.username }}</span>
+                                        <span class="text-token-muted small d-block">{{ u.profile.organization|default:u.email }}</span>
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="modal-footer border-top" style="border-color: var(--token-border) !important;">
+                        <button type="button" class="btn btn-outline-custom" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-gradient-primary">Enregistrer les affectations</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
