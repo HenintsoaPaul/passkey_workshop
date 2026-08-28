@@ -19,11 +19,14 @@ from django.utils import timezone
 from chiffrement_app.models import (
     Document,
     DocumentSigner,
+    DocumentVersion,
     Signature,
     SigningKey,
     UserProfile,
 )
 from chiffrement_app.services import (
+    add_version,
+    create_document,
     current_document_hash,
     mark_signer_signed,
     recompute_document_status,
@@ -54,11 +57,10 @@ class ServiceTestCase(TestCase):
         ]:
             UserProfile.objects.create(user=user, name=name, email=f'{user.username}@x.fr')
 
-        self.document = Document.objects.create(
+        self.document = create_document(
             title='Contrat de services',
             file=SimpleUploadedFile('c.txt', b'Contenu du contrat.', 'text/plain'),
             owner=self.owner,
-            status='pending',
         )
 
         self.keys = {}
@@ -96,6 +98,7 @@ class ServiceTestCase(TestCase):
 
         return Signature.objects.create(
             document=self.document,
+            document_version=self.document.current_version,
             signer=user,
             signing_key=key,
             document_hash=digest,
@@ -156,20 +159,24 @@ class RecomputeStatusTests(ServiceTestCase):
 
         self.assertEqual(recompute_document_status(self.document), 'partially_signed')
 
-    def test_recomputing_does_not_rehash_the_file(self):
-        """`Document.save()` re-reads the whole file; the status path must not."""
+    def test_the_digest_is_recorded_once_at_version_creation(self):
+        """The status path must never re-hash the file behind our back."""
+        version = self.document.current_version
+        original = version.sha256
+
         self.add_signer(self.alice)
         self.sign(self.alice)
         recompute_document_status(self.document)
 
-        # Corrupt the stored hash, recompute, and confirm it was not silently
-        # recalculated behind our back.
-        Document.objects.filter(pk=self.document.pk).update(file_hash='0' * 64)
-        self.document.refresh_from_db()
+        # Corrupt the recorded digest and recompute the status: the digest is
+        # a property of the version, not something a status update recalculates.
+        DocumentVersion.objects.filter(pk=version.pk).update(sha256='0' * 64)
+        self.document.refresh_current_version()
         recompute_document_status(self.document)
-        self.document.refresh_from_db()
 
+        self.document.refresh_current_version()
         self.assertEqual(self.document.file_hash, '0' * 64)
+        self.assertNotEqual(original, '0' * 64)
 
 
 class MarkSignerSignedTests(ServiceTestCase):
@@ -301,3 +308,102 @@ class VerifyDocumentTests(ServiceTestCase):
             handle.write(b'autre chose')
 
         self.assertNotEqual(current_document_hash(self.document), self.document.file_hash)
+
+
+class VersionTests(ServiceTestCase):
+    """§2.5 : toute modification crée une version et invalide les signatures."""
+
+    def new_file(self, content=b'Contenu revise.'):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile('c2.txt', content, 'text/plain')
+
+    def test_a_new_document_starts_at_version_one(self):
+        version = self.document.current_version
+
+        self.assertEqual(version.version_number, 1)
+        self.assertEqual(version.created_by, self.owner)
+        self.assertEqual(len(version.sha256), 64)
+        self.assertEqual(version.mime_type, 'text/plain')
+        self.assertEqual(self.document.file_hash, version.sha256)
+
+    def test_adding_a_version_increments_and_keeps_the_old_one(self):
+        first = self.document.current_version
+
+        second = add_version(self.document, self.new_file(), self.owner)
+
+        self.assertEqual(second.version_number, 2)
+        self.assertEqual(self.document.versions.count(), 2)
+        self.assertNotEqual(second.sha256, first.sha256)
+        self.assertEqual(self.document.current_version, second)
+        self.assertEqual(self.document.file_hash, second.sha256)
+
+    def test_a_new_version_invalidates_the_existing_signatures(self):
+        self.add_signer(self.alice)
+        self.sign(self.alice)
+        self.assertEqual(recompute_document_status(self.document), 'fully_signed')
+
+        add_version(self.document, self.new_file(), self.owner)
+
+        # The old signature is kept — it is still true of the bytes it covered —
+        # but it no longer counts, and the signer is asked again.
+        self.assertEqual(Signature.objects.count(), 1)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, 'pending')
+        self.assertEqual(
+            DocumentSigner.objects.get(document=self.document, user=self.alice).signature_status,
+            'pending',
+        )
+
+    def test_verification_of_a_new_version_is_incomplete_again(self):
+        self.add_signer(self.alice)
+        self.sign(self.alice)
+        self.assertEqual(verify_document(self.document)['verdict'], 'valid')
+
+        add_version(self.document, self.new_file(), self.owner)
+
+        report = verify_document(self.document)
+        self.assertEqual(report['verdict'], 'incomplete')
+        self.assertEqual(report['signed_count'], 0)
+        self.assertEqual(report['version_number'], 2)
+        self.assertEqual(report['missing_signers'], ['Alice Martin'])
+
+    def test_signing_the_new_version_makes_it_valid_again(self):
+        self.add_signer(self.alice)
+        self.sign(self.alice)
+        add_version(self.document, self.new_file(), self.owner)
+
+        self.sign(self.alice)
+
+        report = verify_document(self.document)
+        self.assertEqual(report['verdict'], 'valid')
+        self.assertEqual(report['version_number'], 2)
+        # Both signatures survive; only one belongs to the current version.
+        self.assertEqual(Signature.objects.count(), 2)
+        self.assertEqual(len(report['signatures']), 1)
+
+    def test_the_log_records_the_new_version(self):
+        add_version(self.document, self.new_file(), self.owner)
+
+        self.assertTrue(
+            self.document.logs.filter(details__contains='Version 2').exists()
+        )
+
+    def test_an_archived_document_cannot_get_a_new_version(self):
+        self.document.status = 'archived'
+        self.document.save()
+
+        with self.assertRaises(ValueError):
+            add_version(self.document, self.new_file(), self.owner)
+
+    def test_a_signature_naming_the_wrong_digest_fails_same_version(self):
+        self.add_signer(self.alice)
+        signature = self.sign(self.alice)
+
+        # The row points at the right version but claims a different digest.
+        Signature.objects.filter(pk=signature.pk).update(document_hash='b' * 64)
+
+        report = verify_document(self.document)
+        checks = {c['code']: c for c in report['checks']}
+
+        self.assertFalse(checks['same_version']['passed'])
+        self.assertEqual(report['verdict'], 'invalid')

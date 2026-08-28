@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from chiffrement_app.models import UserProfile, Document, DocumentSigner, SignatureLog
+from chiffrement_app.services import create_document
 from .base import DEFAULT_PASSWORD
 
 
@@ -24,12 +25,11 @@ class SignatureWorkflowTests(TestCase):
             b"Contrat de confidentialite et signature multiple.",
             content_type="text/plain"
         )
-        self.doc = Document.objects.create(
+        self.doc = create_document(
             title="Contrat Confidentiel 2026",
             description="Document de test multi-signataires",
             file=self.uploaded_file,
             owner=self.owner,
-            status='draft'
         )
 
     def test_assign_multiple_signers_and_logging(self):

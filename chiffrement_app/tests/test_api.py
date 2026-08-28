@@ -23,6 +23,7 @@ from chiffrement_app.models import (
     SigningKey,
     UserProfile,
 )
+from chiffrement_app.services import create_document, recompute_document_status
 
 
 MEDIA_ROOT = tempfile.mkdtemp(prefix='chiffrement-tests-')
@@ -73,16 +74,17 @@ class ApiTestCase(TestCase):
         ]:
             UserProfile.objects.create(user=user, name=name, email=f'{user.username}@x.fr')
 
-        self.document = Document.objects.create(
+        self.document = create_document(
             title='Contrat multi-signataires',
             description='Document de test',
             file=SimpleUploadedFile('contrat.txt', b'Contenu du contrat.', 'text/plain'),
             owner=self.owner,
-            status='pending',
         )
 
         DocumentSigner.objects.create(document=self.document, user=self.alice)
         DocumentSigner.objects.create(document=self.document, user=self.bob)
+        recompute_document_status(self.document)
+        self.document.refresh_from_db()
 
         self.alice_private, self.alice_public = make_key_pair()
         self.alice_key = SigningKey.objects.create(
