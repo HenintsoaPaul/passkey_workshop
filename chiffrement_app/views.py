@@ -7,20 +7,13 @@ from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
 from django.db.models import Q
-from django.http import JsonResponse, FileResponse
-from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-import hashlib
 import json
 import uuid
 import base64
-from datetime import timedelta
 
 from webauthn import (
     generate_registration_options,
@@ -38,7 +31,20 @@ from webauthn.helpers.structs import (
     PublicKeyCredentialDescriptor,
 )
 
-from .models import Document, DocumentSigner, UserProfile, SignatureLog, Passkey
+from .models import (
+    Document,
+    DocumentSigner,
+    Passkey,
+    SignatureLog,
+    SigningKey,
+    UserProfile,
+)
+from .services import (
+    add_version,
+    create_document,
+    recompute_document_status,
+    verify_document as run_verification,
+)
 
 # ============ Authentification ============
 
@@ -145,22 +151,12 @@ def upload_document(request):
                 'available_users': available_users
             })
         
-        initial_status = 'pending' if signer_ids else 'draft'
-
-        document = Document.objects.create(
+        document = create_document(
             title=title,
             description=description,
             file=file,
             owner=request.user,
-            status=initial_status,
-            due_date=due_date if due_date else None
-        )
-        
-        SignatureLog.objects.create(
-            document=document,
-            action='created',
-            user=request.user,
-            details=f'Document "{title}" créé'
+            due_date=due_date if due_date else None,
         )
 
         if signer_ids:
@@ -173,11 +169,13 @@ def upload_document(request):
                 )
                 SignatureLog.objects.create(
                     document=document,
-                    action='created',
+                    action='assigned',
                     user=request.user,
                     details=f'Signataire {signer_user.username} affecté au document'
                 )
-        
+
+            recompute_document_status(document)
+
         messages.success(request, 'Document téléversé avec succès!')
         return redirect('chiffrement_app:document_detail', document_id=document.id)
     
@@ -210,7 +208,14 @@ def document_detail(request, document_id):
 
     signers = document.signers.select_related('user__profile').all()
     total_signers = signers.count()
-    signed_count = signers.filter(signature_status='signed').count()
+
+    # Counted from the signatures on the current version, so the page cannot
+    # claim progress the verification report would deny.
+    version = document.current_version
+    signed_ids = set(
+        version.signatures.values_list('signer_id', flat=True) if version else []
+    )
+    signed_count = len(signed_ids)
     progress_pct = int((signed_count / total_signers) * 100) if total_signers > 0 else 0
 
     logs = document.logs.select_related('user').all()
@@ -221,11 +226,14 @@ def document_detail(request, document_id):
         'is_owner': is_owner,
         'user_signer': user_signer,
         'signers': signers,
+        'signed_ids': signed_ids,
         'total_signers': total_signers,
         'signed_count': signed_count,
         'progress_pct': progress_pct,
         'logs': logs,
         'available_users': available_users,
+        'versions': document.versions.select_related('created_by__profile'),
+        'current_version': version,
     }
     return render(request, 'documents/detail.html', context)
 
@@ -233,7 +241,14 @@ def document_detail(request, document_id):
 @login_required(login_url='chiffrement_app:login')
 def assign_signers(request, document_id):
     document = get_object_or_404(Document, id=document_id, owner=request.user)
-    
+
+    if document.status == 'archived':
+        messages.error(
+            request,
+            "Ce document est archivé : ses signataires ne peuvent plus changer.",
+        )
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
     if request.method == 'POST':
         signer_ids = request.POST.getlist('signers')
         current_signers = DocumentSigner.objects.filter(document=document)
@@ -249,7 +264,7 @@ def assign_signers(request, document_id):
                 )
                 SignatureLog.objects.create(
                     document=document,
-                    action='created',
+                    action='assigned',
                     user=request.user,
                     details=f'Signataire {s_user.username} affecté au document'
                 )
@@ -260,23 +275,15 @@ def assign_signers(request, document_id):
                 existing.delete()
                 SignatureLog.objects.create(
                     document=document,
-                    action='created',
+                    action='unassigned',
                     user=request.user,
                     details=f'Signataire {existing.user.username} retiré du document'
                 )
                 
-        # Update document status
-        updated_signers = DocumentSigner.objects.filter(document=document)
-        if updated_signers.exists():
-            signed_c = updated_signers.filter(signature_status='signed').count()
-            if signed_c == updated_signers.count():
-                document.status = 'fully_signed'
-            elif signed_c > 0:
-                document.status = 'partially_signed'
-            else:
-                document.status = 'pending'
-            document.save()
-            
+        # Derived centrally, from the signatures actually recorded, so this
+        # view and the API can never disagree about a document's state.
+        recompute_document_status(document)
+
         messages.success(request, 'Signataires mis à jour avec succès.')
         
     return redirect('chiffrement_app:document_detail', document_id=document.id)
@@ -284,63 +291,81 @@ def assign_signers(request, document_id):
 
 @login_required(login_url='chiffrement_app:login')
 def sign_document(request, document_id):
+    """Signing is not possible from a browser, and says so.
+
+    A signature requires the RSA private key, which never leaves the phone,
+    and a fresh passkey confirmation (§2.1–§2.4). This view used to flip a
+    status field with no cryptography behind it, which made the web app and
+    the verification report disagree about whether a document was signed.
+    """
     document = get_object_or_404(Document, id=document_id)
-    signer = get_object_or_404(DocumentSigner, document=document, user=request.user)
-    
-    if request.method == 'POST':
-        signer.signature_status = 'signed'
-        signer.signature_date = timezone.now()
-        signer.save()
-        
-        SignatureLog.objects.create(
-            document=document,
-            action='signed',
-            user=request.user,
-            details=f'Document signé électriquement par {request.user.username}'
-        )
-        
-        # Check total progress
-        all_signers = document.signers.all()
-        signed_count = all_signers.filter(signature_status='signed').count()
-        
-        if signed_count == all_signers.count():
-            document.status = 'fully_signed'
-        else:
-            document.status = 'partially_signed'
-        document.save()
-        
-        messages.success(request, 'Félicitations! Vous avez signé le document avec succès.')
-        return redirect('chiffrement_app:document_detail', document_id=document.id)
-        
+    get_object_or_404(DocumentSigner, document=document, user=request.user)
+
+    messages.info(
+        request,
+        "La signature se fait depuis l'application mobile : votre clé privée "
+        "ne quitte jamais votre téléphone et votre passkey doit confirmer "
+        "chaque signature.",
+    )
+
     return redirect('chiffrement_app:document_detail', document_id=document.id)
 
 
 @login_required(login_url='chiffrement_app:login')
 def verify_document(request, document_id):
-    document = get_object_or_404(Document, id=document_id)
-    
-    # Recalculate current hash
-    hash_sha256 = hashlib.sha256()
-    try:
-        with document.file.open('rb') as f:
-            for chunk in f.chunks():
-                hash_sha256.update(chunk)
-        current_hash = hash_sha256.hexdigest()
-    except Exception:
-        current_hash = ""
+    """Run the same verification the mobile app sees, and show every check.
 
-    is_valid = (current_hash == document.file_hash) and bool(document.file_hash)
-    signers = document.signers.select_related('user__profile').all()
-    logs = document.logs.select_related('user').all()
+    The old version compared the file against its stored hash and called that
+    'verified'. That is only the fourth of the four conditions in §2.5; the
+    signatures themselves were never checked.
+    """
+    document = get_object_or_404(Document, id=document_id)
+
+    report = run_verification(document)
 
     context = {
         'document': document,
-        'current_hash': current_hash,
-        'is_valid': is_valid,
-        'signers': signers,
-        'logs': logs,
+        'report': report,
+        'current_hash': report['current_hash'],
+        'is_valid': report['verdict'] == 'valid',
+        'signers': document.signers.select_related('user__profile').all(),
+        'logs': document.logs.select_related('user').all(),
     }
     return render(request, 'documents/verify.html', context)
+
+
+@login_required(login_url='chiffrement_app:login')
+def upload_version(request, document_id):
+    """Replace a document's content, which invalidates its signatures.
+
+    §2.5: a modified document is a new version, and everyone has to sign
+    again. Nothing is overwritten — the previous version and the signatures
+    made against it are kept as the record of what was agreed then.
+    """
+    document = get_object_or_404(Document, id=document_id, owner=request.user)
+
+    if request.method != 'POST':
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+    file = request.FILES.get('file')
+
+    if not file:
+        messages.error(request, 'Aucun fichier fourni.')
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+    try:
+        version = add_version(document, file, request.user)
+    except ValueError as error:
+        messages.error(request, str(error))
+        return redirect('chiffrement_app:document_detail', document_id=document.id)
+
+    messages.success(
+        request,
+        f'Version {version.version_number} déposée. Les signatures précédentes '
+        f'ne valent plus pour ce contenu : chaque signataire doit signer à nouveau.',
+    )
+
+    return redirect('chiffrement_app:document_detail', document_id=document.id)
 
 
 @login_required(login_url='chiffrement_app:login')
@@ -351,7 +376,7 @@ def archive_document(request, document_id):
     
     SignatureLog.objects.create(
         document=document,
-        action='created',
+        action='archived',
         user=request.user,
         details=f'Document archivé par {request.user.username}'
     )
@@ -395,9 +420,6 @@ def profile_edit(request):
         address = request.POST.get('address')
         city = request.POST.get('city')
         bio = request.POST.get('bio')
-        
-        if 'signature_image' in request.FILES:
-            profile.signature_image = request.FILES['signature_image']
             
         profile.name = name or profile.name
         profile.email = email or profile.email
@@ -419,6 +441,66 @@ def profile_edit(request):
         return redirect('chiffrement_app:profile')
         
     return render(request, 'users/profile_edit.html', {'profile': profile})
+
+
+@login_required(login_url='chiffrement_app:login')
+def user_create(request):
+    """Let an administrator create a signatory account.
+
+    §1 asks the web app to create and manage users; until now the only way in
+    was self-registration, which leaves no way to onboard a signatory.
+    """
+    if not request.user.is_staff:
+        messages.error(request, "Seul un administrateur peut créer un compte.")
+        return redirect('chiffrement_app:user_list')
+
+    if request.method == 'POST':
+        username = (request.POST.get('username') or '').strip()
+        email = (request.POST.get('email') or '').strip()
+        name = (request.POST.get('name') or '').strip()
+        password = request.POST.get('password') or ''
+
+        errors = []
+
+        if not username:
+            errors.append("Le nom d'utilisateur est obligatoire.")
+        elif User.objects.filter(username=username).exists():
+            errors.append("Ce nom d'utilisateur existe déjà.")
+
+        if email and User.objects.filter(email=email).exists():
+            errors.append("Cet email est déjà utilisé.")
+
+        if len(password) < 8:
+            errors.append('Le mot de passe doit faire au moins 8 caractères.')
+
+        if errors:
+            for error in errors:
+                messages.error(request, error)
+
+            return render(request, 'users/create.html', {
+                'form_values': {'username': username, 'email': email, 'name': name},
+            })
+
+        user = User.objects.create_user(
+            username=username, email=email, password=password
+        )
+        user.first_name = name
+        user.save()
+
+        UserProfile.objects.create(
+            user=user, name=name or username, email=email
+        )
+
+        messages.success(
+            request,
+            f"Compte « {username} » créé. L'utilisateur doit maintenant "
+            f"enregistrer une passkey et une clé de signature depuis "
+            f"l'application mobile.",
+        )
+
+        return redirect('chiffrement_app:user_detail', user_id=user.id)
+
+    return render(request, 'users/create.html', {'form_values': {}})
 
 
 @login_required(login_url='chiffrement_app:login')
@@ -445,25 +527,24 @@ def user_detail(request, user_id):
     
     documents = Document.objects.filter(owner=user_obj)
     signatures = DocumentSigner.objects.filter(user=user_obj)
-    
+
     context = {
         'target_user': user_obj,
         'profile': profile,
         'documents': documents,
         'signatures': signatures,
         'is_own_profile': request.user == user_obj,
+        # Public halves only: enough to manage a user's credentials, and
+        # nothing that could stand in for them.
+        'signing_keys': SigningKey.objects.filter(user=user_obj),
+        'passkey_count': Passkey.objects.filter(user=user_obj).count(),
     }
     return render(request, 'users/detail.html', context)
 
 
 # ============ Passkeys ============
 
-RP_ID = settings.PASSKEY_HOST
-RP_NAME = settings.PASSKEY_RP_NAME
-ORIGIN = f'https://{settings.PASSKEY_HOST}'
-EXPECTED_ORIGINS = [
-    f'android:apk-key-hash:{settings.PASSKEY_APK_KEY_HASH}'
-]
+from .webauthn_config import EXPECTED_ORIGINS, ORIGIN, RP_ID, RP_NAME  # noqa: F401
 
 
 def assetlinks(request):
@@ -484,15 +565,63 @@ def assetlinks(request):
     ], safe=False)
 
 
+def passkey_error(code, detail, status=400):
+    """Same envelope as the /api/ endpoints, so the client parses one shape."""
+    return JsonResponse({'error': code, 'detail': detail}, status=status)
+
+
+def read_passkey_body(request):
+    try:
+        return json.loads(request.body or b'{}')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
 @csrf_exempt
 def register_options(request):
+    """Begin enrolling a passkey — but only for someone who proves who they are.
+
+    Enrolling a passkey creates a credential that logs in without a password
+    ever again, so the request has to be authenticated. It previously took a
+    username alone and called get_or_create, which meant anyone could invent
+    an account, or bind their own passkey to somebody else's username and sign
+    in as them.
+
+    The account password is used here and only here: once the passkey exists,
+    logging in never asks for it again.
+    """
     if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+        return passkey_error('method_not_allowed', 'POST requis.', status=405)
 
-    body = json.loads(request.body)
-    username = body['username']
+    body = read_passkey_body(request)
 
-    user, _ = User.objects.get_or_create(username=username, defaults={'email': username})
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    username = (body.get('username') or '').strip()
+    password = body.get('password') or ''
+
+    if not username:
+        return passkey_error('missing_username', "Saisissez votre nom d'utilisateur.")
+
+    if not password:
+        return passkey_error(
+            'missing_password',
+            'Saisissez le mot de passe de votre compte pour créer une passkey.',
+        )
+
+    user = authenticate(request, username=username, password=password)
+
+    if user is None:
+        # One message for both cases on purpose: distinguishing them would
+        # confirm which usernames exist.
+        return passkey_error(
+            'invalid_credentials',
+            "Nom d'utilisateur ou mot de passe incorrect.",
+            status=401,
+        )
+
+    request.session['registration_user'] = user.id
 
     options = generate_registration_options(
         rp_id=RP_ID,
@@ -517,23 +646,52 @@ def register_verify(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
-    body = json.loads(request.body)
-    username = body['username']
-    credential = body['credential']
+    body = read_passkey_body(request)
 
-    user = User.objects.get(username=username)
-    challenge = base64.urlsafe_b64decode(request.session['registration_challenge'] + '==')
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
 
-    if not challenge:
-        return JsonResponse({'error': 'No registration ceremony'}, status=400)
+    username = (body.get('username') or '').strip()
+    credential = body.get('credential')
 
-    verification = verify_registration_response(
-        credential=credential,
-        expected_challenge=challenge,
-        expected_rp_id=RP_ID,
-        expected_origin=EXPECTED_ORIGINS,
-        require_user_verification=False,
+    stored_challenge = request.session.get('registration_challenge')
+    challenge = (
+        base64.urlsafe_b64decode(stored_challenge + '==') if stored_challenge else None
     )
+    user_id = request.session.get('registration_user')
+
+    if not challenge or not user_id:
+        return passkey_error(
+            'no_ceremony',
+            "La création de la passkey a expiré. Recommencez depuis le début.",
+        )
+
+    # The ceremony has to finish for the account that started it, so a reply
+    # cannot be redirected onto a different user.
+    user = User.objects.filter(id=user_id, username=username).first()
+
+    if user is None:
+        return passkey_error(
+            'ceremony_mismatch',
+            "Cette création de passkey ne correspond pas au compte vérifié.",
+        )
+
+    if not credential:
+        return passkey_error('missing_credential', 'Aucune passkey reçue.')
+
+    try:
+        verification = verify_registration_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=RP_ID,
+            expected_origin=EXPECTED_ORIGINS,
+            require_user_verification=False,
+        )
+    except Exception as error:
+        return passkey_error(
+            'passkey_rejected',
+            f"La passkey n'a pas pu être vérifiée : {error}",
+        )
 
     Passkey.objects.create(
         user=user,
@@ -542,7 +700,8 @@ def register_verify(request):
         sign_count=verification.sign_count,
     )
 
-    del request.session['registration_challenge']
+    request.session.pop('registration_challenge', None)
+    request.session.pop('registration_user', None)
 
     return JsonResponse({'success': True, 'username': username})
 
@@ -550,13 +709,31 @@ def register_verify(request):
 @csrf_exempt
 def login_options(request):
     if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+        return passkey_error('method_not_allowed', 'POST requis.', status=405)
 
-    body = json.loads(request.body)
-    username = body['username']
+    body = read_passkey_body(request)
 
-    user = User.objects.get(username=username)
-    passkeys = Passkey.objects.filter(user=user)
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    username = (body.get('username') or '').strip()
+
+    if not username:
+        return passkey_error('missing_username', "Saisissez votre nom d'utilisateur.")
+
+    user = User.objects.filter(username=username).first()
+    passkeys = list(Passkey.objects.filter(user=user)) if user else []
+
+    if not passkeys:
+        # Deliberately the same answer whether the account is unknown or simply
+        # has no passkey yet: actionable for the owner, uninformative to
+        # someone probing for usernames.
+        return passkey_error(
+            'no_passkey',
+            "Aucune passkey n'est associée à ce compte sur ce serveur. "
+            "Créez-en une avec le mot de passe de votre compte.",
+            status=404,
+        )
 
     allow_credentials = [
         PublicKeyCredentialDescriptor(id=bytes(pk.credential_id))
@@ -575,38 +752,88 @@ def login_options(request):
     return JsonResponse(json.loads(options_to_json(options)))
 
 
+def _verified_assertion(credential, challenge, passkey):
+    """Check a WebAuthn assertion, returning None instead of raising.
+
+    A passkey the server cannot verify is an expected outcome — a stale
+    credential, a different device — and deserves a 401 with an explanation
+    rather than a 500 with a stack trace.
+    """
+    try:
+        return verify_authentication_response(
+            credential=credential,
+            expected_challenge=challenge,
+            expected_rp_id=RP_ID,
+            expected_origin=EXPECTED_ORIGINS,
+            credential_public_key=bytes(passkey.public_key),
+            credential_current_sign_count=passkey.sign_count,
+            require_user_verification=False,
+        )
+    except Exception:
+        return None
+
+
 @csrf_exempt
 def login_verify(request):
     if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+        return passkey_error('method_not_allowed', 'POST requis.', status=405)
 
-    body = json.loads(request.body)
-    credential = body['credential']
+    body = read_passkey_body(request)
 
-    challenge = base64.urlsafe_b64decode(request.session['authentication_challenge'] + '==')
+    if body is None:
+        return passkey_error('invalid_json', 'Corps de requête illisible.')
+
+    credential = body.get('credential')
+
+    stored_challenge = request.session.get('authentication_challenge')
+    challenge = (
+        base64.urlsafe_b64decode(stored_challenge + '==') if stored_challenge else None
+    )
     user_id = request.session.get('authentication_user')
 
     if not challenge or not user_id:
-        return JsonResponse({'error': 'No authentication ceremony'}, status=400)
+        return passkey_error(
+            'no_ceremony',
+            'La connexion a expiré. Réessayez de vous connecter.',
+        )
 
-    user = User.objects.get(id=user_id)
-    credential_id = base64url_to_bytes(credential['rawId'])
-    passkey = Passkey.objects.get(user=user, credential_id=credential_id)
+    if not credential or not credential.get('rawId'):
+        return passkey_error('missing_credential', 'Aucune passkey reçue.')
 
-    verification = verify_authentication_response(
-        credential=credential,
-        expected_challenge=challenge,
-        expected_rp_id=RP_ID,
-        expected_origin=EXPECTED_ORIGINS,
-        credential_public_key=bytes(passkey.public_key),
-        credential_current_sign_count=passkey.sign_count,
-        require_user_verification=False,
+    user = User.objects.filter(id=user_id).first()
+    passkey = (
+        Passkey.objects.filter(
+            user=user, credential_id=base64url_to_bytes(credential['rawId'])
+        ).first()
+        if user
+        else None
     )
+
+    if passkey is None:
+        return passkey_error(
+            'unknown_passkey',
+            "Cette passkey n'est pas enregistrée pour ce compte sur ce serveur.",
+            status=401,
+        )
+
+    verification = _verified_assertion(credential, challenge, passkey)
+
+    if verification is None:
+        return passkey_error(
+            'passkey_rejected',
+            "La passkey n'a pas pu être vérifiée par le serveur.",
+            status=401,
+        )
 
     passkey.sign_count = verification.new_sign_count
     passkey.save(update_fields=['sign_count'])
 
-    del request.session['authentication_challenge']
-    del request.session['authentication_user']
+    # Establish the session the mobile JSON API authenticates against. Without
+    # this the client holds a cookie for an anonymous session and every
+    # /api/ call comes back 401.
+    login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+
+    request.session.pop('authentication_challenge', None)
+    request.session.pop('authentication_user', None)
 
     return JsonResponse({'success': True, 'username': user.username})

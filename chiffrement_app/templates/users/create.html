@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Créer un utilisateur{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center my-4">
+    <div class="col-12 col-md-8 col-lg-6">
+        <div class="card-custom p-4 p-md-5">
+            <div class="mb-4 pb-3 border-bottom" style="border-color: var(--token-border) !important;">
+                <h2 class="h3 fw-bold text-white mb-1">Créer un utilisateur</h2>
+                <p class="text-token-muted small mb-0">
+                    Le compte permet de recevoir des documents à signer. La passkey et
+                    la clé de signature RSA sont ensuite enregistrées par l'utilisateur
+                    lui-même depuis l'application mobile.
+                </p>
+            </div>
+
+            <form method="POST" action="{% url 'chiffrement_app:user_create' %}">
+                {% csrf_token %}
+
+                <div class="mb-3">
+                    <label for="username" class="form-label text-white">Nom d'utilisateur</label>
+                    <input type="text" class="form-control" id="username" name="username"
+                           value="{{ form_values.username|default:'' }}" required autofocus>
+                </div>
+
+                <div class="mb-3">
+                    <label for="name" class="form-label text-white">Nom complet</label>
+                    <input type="text" class="form-control" id="name" name="name"
+                           value="{{ form_values.name|default:'' }}">
+                </div>
+
+                <div class="mb-3">
+                    <label for="email" class="form-label text-white">Email</label>
+                    <input type="email" class="form-control" id="email" name="email"
+                           value="{{ form_values.email|default:'' }}">
+                </div>
+
+                <div class="mb-4">
+                    <label for="password" class="form-label text-white">Mot de passe provisoire</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                    <span class="text-token-muted small">8 caractères minimum.</span>
+                </div>
+
+                <div class="d-flex gap-2 justify-content-end">
+                    <a href="{% url 'chiffrement_app:user_list' %}" class="btn btn-outline-custom">Annuler</a>
+                    <button type="submit" class="btn btn-gradient-primary">
+                        <i class="fa-solid fa-user-plus me-1"></i>Créer le compte
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

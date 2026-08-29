@@ -37,6 +37,21 @@ dependencies:
   http: ^1.6.0
   credential_manager: ^4.3.0
 
+  # SHA-256 of the downloaded document, computed on the device rather than
+  # taken from the server.
+  crypto: ^3.0.3
+
+  # RSA-2048 key generation and PKCS#1 v1.5 signing, in pure Dart, so the
+  # private key is created on the phone and never travels.
+  pointycastle: ^3.7.3
+
+  # PEM encoding/decoding for the key pair (ASN.1 wrapper over pointycastle).
+  basic_utils: ^5.7.0
+
+  # Holds the private key PEM in Android's EncryptedSharedPreferences, keyed
+  # from the platform keystore.
+  flutter_secure_storage: ^9.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -61,6 +76,18 @@ flutter:
 
   assets:
     - assets/config.json
+
+  fonts:
+    - family: HankenGrotesk
+      fonts:
+        - asset: assets/fonts/HankenGrotesk-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/HankenGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/HankenGrotesk-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/HankenGrotesk-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

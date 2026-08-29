@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from chiffrement_app.models import UserProfile, Document, DocumentSigner, SignatureLog
+from chiffrement_app.services import create_document
 from .base import DEFAULT_PASSWORD
 
 
@@ -24,12 +25,11 @@ class SignatureWorkflowTests(TestCase):
             b"Contrat de confidentialite et signature multiple.",
             content_type="text/plain"
         )
-        self.doc = Document.objects.create(
+        self.doc = create_document(
             title="Contrat Confidentiel 2026",
             description="Document de test multi-signataires",
             file=self.uploaded_file,
             owner=self.owner,
-            status='draft'
         )
 
     def test_assign_multiple_signers_and_logging(self):
@@ -49,47 +49,59 @@ class SignatureWorkflowTests(TestCase):
         self.assertTrue(logs.filter(details__contains='signer1').exists())
         self.assertTrue(logs.filter(details__contains='signer2').exists())
 
-    def test_signer_workflow_and_status_progression(self):
-        # Assign signers
+    def test_viewing_a_document_marks_the_signer_as_having_seen_it(self):
         DocumentSigner.objects.create(document=self.doc, user=self.signer1, signature_status='pending')
-        DocumentSigner.objects.create(document=self.doc, user=self.signer2, signature_status='pending')
-        self.doc.status = 'pending'
-        self.doc.save()
 
-        # Signer 1 views document
         self.client.login(username='signer1', password=DEFAULT_PASSWORD)
         detail_url = reverse('chiffrement_app:document_detail', kwargs={'document_id': self.doc.id})
-        resp_view = self.client.get(detail_url)
-        self.assertEqual(resp_view.status_code, 200)
+        response = self.client.get(detail_url)
 
+        self.assertEqual(response.status_code, 200)
         s1_ds = DocumentSigner.objects.get(document=self.doc, user=self.signer1)
         self.assertEqual(s1_ds.signature_status, 'viewed')
 
-        # Signer 1 signs document
+    def test_the_web_cannot_sign_a_document(self):
+        """Signer depuis un navigateur est refusé : pas de clé privée, pas de passkey."""
+        DocumentSigner.objects.create(document=self.doc, user=self.signer1, signature_status='pending')
+        self.doc.status = 'pending'
+        self.doc.save()
+
+        self.client.login(username='signer1', password=DEFAULT_PASSWORD)
+        detail_url = reverse('chiffrement_app:document_detail', kwargs={'document_id': self.doc.id})
         sign_url = reverse('chiffrement_app:sign_document', kwargs={'document_id': self.doc.id})
-        resp_sign1 = self.client.post(sign_url)
-        self.assertRedirects(resp_sign1, detail_url)
 
+        response = self.client.post(sign_url)
+        self.assertRedirects(response, detail_url)
+
+        # No signature and no progress. Following the redirect lands on the
+        # detail page, which legitimately marks the document as viewed — but
+        # never as signed.
         self.doc.refresh_from_db()
-        self.assertEqual(self.doc.status, 'partially_signed')
+        self.assertEqual(self.doc.status, 'pending')
+        self.assertEqual(
+            DocumentSigner.objects.get(document=self.doc, user=self.signer1).signature_status,
+            'viewed',
+        )
+        self.assertFalse(SignatureLog.objects.filter(document=self.doc, action='signed').exists())
 
-        # Signer 2 signs document
-        self.client.login(username='signer2', password=DEFAULT_PASSWORD)
-        resp_sign2 = self.client.post(sign_url)
-        self.assertRedirects(resp_sign2, detail_url)
+    def test_verify_document_reports_the_four_conditions(self):
+        DocumentSigner.objects.create(document=self.doc, user=self.signer1, signature_status='pending')
 
-        self.doc.refresh_from_db()
-        self.assertEqual(self.doc.status, 'fully_signed')
-
-    def test_verify_document_integrity(self):
         self.client.login(username='doc_owner', password=DEFAULT_PASSWORD)
         verify_url = reverse('chiffrement_app:verify_document', kwargs={'document_id': self.doc.id})
         response = self.client.get(verify_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'documents/verify.html')
-        self.assertTrue(response.context['is_valid'])
-        self.assertEqual(response.context['current_hash'], self.doc.file_hash)
+
+        report = response.context['report']
+        self.assertEqual(report['current_hash'], self.doc.file_hash)
+        self.assertEqual(len(report['checks']), 4)
+
+        # An unsigned document is incomplete, not "authentic": the file hash
+        # matching proves nothing on its own.
+        self.assertEqual(report['verdict'], 'incomplete')
+        self.assertFalse(response.context['is_valid'])
 
     def test_archive_document(self):
         self.client.login(username='doc_owner', password=DEFAULT_PASSWORD)

@@ -22,18 +22,79 @@
                 </a>
             </div>
 
-            <!-- Status Integrity Card -->
-            <div class="p-4 border rounded-3 text-center mb-4" style="background: {% if is_valid %}rgba(52, 211, 153, 0.12){% else %}rgba(248, 113, 113, 0.12){% endif %}; border-color: {% if is_valid %}var(--token-success){% else %}var(--token-danger){% endif %} !important;">
-                {% if is_valid %}
+            <!-- Overall verdict: the four conditions of §2.5, not just the hash -->
+            <div class="p-4 border rounded-3 text-center mb-4" style="background: {% if report.verdict == 'valid' %}rgba(52, 211, 153, 0.12){% elif report.verdict == 'incomplete' %}rgba(245, 158, 11, 0.12){% else %}rgba(248, 113, 113, 0.12){% endif %}; border-color: {% if report.verdict == 'valid' %}var(--token-success){% elif report.verdict == 'incomplete' %}var(--token-warning){% else %}var(--token-danger){% endif %} !important;">
+                {% if report.verdict == 'valid' %}
                     <i class="fa-solid fa-circle-check fs-1 mb-2" style="color: var(--token-success);"></i>
-                    <h3 class="h4 fw-bold text-white mb-1">DOCUMENT AUTHENTIQUE ET NON ALTÉRÉ</h3>
-                    <p class="text-token-secondary small mb-0">Le hash SHA-256 recalculé correspond exactement au hash enregistré lors du dépôt du document.</p>
+                    <h3 class="h4 fw-bold text-white mb-1">DOCUMENT VALIDE</h3>
+                    <p class="text-token-secondary small mb-0">Toutes les signatures obligatoires sont présentes, valides, et portent sur la version actuelle du document.</p>
+                {% elif report.verdict == 'incomplete' %}
+                    <i class="fa-solid fa-hourglass-half fs-1 mb-2" style="color: var(--token-warning);"></i>
+                    <h3 class="h4 fw-bold text-white mb-1">SIGNATURES INCOMPLÈTES</h3>
+                    <p class="text-token-secondary small mb-0">
+                        {% if report.missing_signers %}En attente de : {{ report.missing_signers|join:", " }}.
+                        {% else %}Ce document n'a pas encore été signé.{% endif %}
+                    </p>
                 {% else %}
                     <i class="fa-solid fa-triangle-exclamation fs-1 mb-2" style="color: var(--token-danger);"></i>
-                    <h3 class="h4 fw-bold text-white mb-1">AVERTISSEMENT D'ALTÉRATION</h3>
-                    <p class="text-token-secondary small mb-0">Le hash du fichier ne correspond pas au hash original enregisté. Le document a pu être modifié ou corrompu.</p>
+                    <h3 class="h4 fw-bold text-white mb-1">DOCUMENT INVALIDE</h3>
+                    <p class="text-token-secondary small mb-0">Au moins une vérification cryptographique a échoué. Voir le détail ci-dessous.</p>
                 {% endif %}
+                <p class="text-token-muted small mb-0 mt-2">{{ report.signed_count }} sur {{ report.required_count }} signature(s) enregistrée(s)</p>
             </div>
+
+            <!-- The four conditions, each reported separately -->
+            <div class="mb-4">
+                <h5 class="fw-bold text-white mb-3"><i class="fa-solid fa-list-check me-2" style="color: var(--token-accent-indigo);"></i>Conditions de validité</h5>
+                <div class="list-group">
+                    {% for check in report.checks %}
+                        <div class="list-group-item text-white d-flex align-items-start gap-3 p-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                            {% if check.passed %}
+                                <i class="fa-solid fa-circle-check mt-1" style="color: var(--token-success);"></i>
+                            {% else %}
+                                <i class="fa-solid fa-circle-xmark mt-1" style="color: var(--token-danger);"></i>
+                            {% endif %}
+                            <div>
+                                <span class="d-block">{{ check.label }}</span>
+                                {% if check.detail %}
+                                    <span class="small {% if check.passed %}text-token-muted{% else %}text-danger{% endif %}">{{ check.detail }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Per-signature cryptographic result -->
+            {% if report.signatures %}
+            <div class="mb-4">
+                <h5 class="fw-bold text-white mb-3"><i class="fa-solid fa-file-signature me-2" style="color: var(--token-accent-indigo);"></i>Signatures RSA vérifiées</h5>
+                <div class="list-group">
+                    {% for sig in report.signatures %}
+                        <div class="list-group-item text-white p-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <span class="fw-bold d-block text-white">{{ sig.signer_name }}</span>
+                                    <span class="text-token-muted small">{{ sig.algorithm }} &middot; {{ sig.signed_at|date:"d/m/Y H:i:s" }}</span>
+                                </div>
+                                {% if sig.is_valid %}
+                                    <span class="badge badge-status badge-signed"><i class="fa-solid fa-shield-halved me-1"></i>Valide</span>
+                                {% else %}
+                                    <span class="badge badge-status badge-pending" style="color: var(--token-danger);"><i class="fa-solid fa-shield-virus me-1"></i>Invalide</span>
+                                {% endif %}
+                            </div>
+                            <div class="mt-2">
+                                <span class="text-token-muted small d-block">Empreinte signée</span>
+                                <code class="text-token-accent small text-break">{{ sig.document_hash }}</code>
+                            </div>
+                            {% if not sig.is_valid and sig.reason %}
+                                <span class="text-danger small d-block mt-2">{{ sig.reason }}</span>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Technical Hash Check Details -->
             <div class="mb-4">
@@ -46,7 +107,7 @@
 
                 <div class="p-3 border rounded-3" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
                     <span class="text-token-muted small d-block mb-1">Hash SHA-256 Recalculé (En direct)</span>
-                    <code class="{% if is_valid %}text-success{% else %}text-danger{% endif %} small text-break">{{ current_hash }}</code>
+                    <code class="{% if current_hash == document.file_hash %}text-success{% else %}text-danger{% endif %} small text-break">{{ current_hash|default:"illisible" }}</code>
                 </div>
             </div>
 

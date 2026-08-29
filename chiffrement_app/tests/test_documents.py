@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from chiffrement_app.models import Document
+from chiffrement_app.services import create_document
 from .base import DEFAULT_PASSWORD
 
 
@@ -44,10 +45,10 @@ class DocumentUploadTests(TestCase):
     def test_upload_document_title_unicity(self):
         self.client.login(username='uploader', password=DEFAULT_PASSWORD)
         initial_file = SimpleUploadedFile("existant.pdf", b"Initial file content", content_type="application/pdf")
-        Document.objects.create(
+        create_document(
             title='Document Existant',
             file=initial_file,
-            owner=self.user
+            owner=self.user,
         )
         file_content = b"Autre contenu"
         uploaded_file = SimpleUploadedFile("autre.pdf", file_content, content_type="application/pdf")

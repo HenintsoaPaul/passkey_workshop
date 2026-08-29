@@ -20,14 +20,17 @@ void main() {
       });
 
       final result = await http.runWithClient(
-        () => Api.registerOptions('alice'),
+        () => Api.registerOptions('alice', 'secret'),
         () => mockClient,
       );
 
       expect(capturedRequest, isNotNull);
       expect(capturedRequest!.method, 'POST');
       expect(capturedRequest!.url.path, '/chiffrement_app/register/options/');
-      expect(jsonDecode(capturedRequest!.body), {'username': 'alice'});
+      expect(jsonDecode(capturedRequest!.body), {
+        'username': 'alice',
+        'password': 'secret',
+      });
       expect(result, {'challenge': 'abc123'});
     });
 
@@ -123,7 +126,7 @@ void main() {
       });
 
       await http.runWithClient(() async {
-        await Api.registerOptions('alice');
+        await Api.registerOptions('alice', 'secret');
         await Api.loginOptions('alice');
       }, () => mockClient);
 
@@ -138,7 +141,7 @@ void main() {
 
       await http.runWithClient(() async {
         await expectLater(
-          Api.registerOptions('alice'),
+          Api.registerOptions('alice', 'secret'),
           throwsA(isA<Exception>()),
         );
       }, () => mockClient);

@@ -44,10 +44,10 @@
                         </a>
                     {% endif %}
 
-                    {% if document.file %}
-                        <a href="{{ document.file.url }}" class="btn btn-sm btn-gradient-primary" download>
-                            <i class="fa-solid fa-download me-1"></i>Télécharger
-                        </a>
+                    {% if is_owner and document.status != 'archived' %}
+                        <button type="button" class="btn btn-sm btn-gradient-primary" data-bs-toggle="modal" data-bs-target="#versionModal">
+                            <i class="fa-solid fa-file-arrow-up me-1"></i>Nouvelle version
+                        </button>
                     {% endif %}
                 </div>
             </div>
@@ -62,7 +62,7 @@
                 </div>
                 <div class="col-md-4">
                     <div class="p-3 border rounded-3 h-100" style="background: var(--token-bg-surface); border-color: var(--token-border) !important;">
-                        <span class="text-token-muted small fw-semibold text-uppercase d-block mb-1">Empreinte SHA-256</span>
+                        <span class="text-token-muted small fw-semibold text-uppercase d-block mb-1">Empreinte SHA-256 &middot; version {{ document.version_number }}</span>
                         <code class="text-token-accent small d-block text-break">{{ document.file_hash|default:"Non calculée" }}</code>
                         {% if document.due_date %}
                             <span class="text-token-muted small d-block mt-2">
@@ -76,16 +76,14 @@
             <!-- Signature Action Banner (If user needs to sign) -->
             {% if user_signer and user_signer.signature_status != 'signed' and document.status != 'archived' %}
                 <div class="p-4 border rounded-3 mb-4 text-center" style="background: rgba(99, 102, 241, 0.12); border-color: var(--token-border-strong) !important;">
-                    <i class="fa-solid fa-signature fs-2 mb-2" style="color: var(--token-accent-pink);"></i>
+                    <i class="fa-solid fa-mobile-screen-button fs-2 mb-2" style="color: var(--token-accent-pink);"></i>
                     <h4 class="h5 fw-bold text-white mb-2">Votre signature est requise sur ce document</h4>
-                    <p class="text-token-muted small mb-3">En cliquant sur le bouton ci-dessous, vous apposerez votre signature numérique officielle.</p>
-                    
-                    <form method="POST" action="{% url 'chiffrement_app:sign_document' document_id=document.id %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-gradient-primary px-4 py-2">
-                            <i class="fa-solid fa-pen-nib me-2"></i>Signer le document maintenant
-                        </button>
-                    </form>
+                    <p class="text-token-muted small mb-0">
+                        Ouvrez l'application mobile pour signer. Votre clé privée RSA ne
+                        quitte jamais votre téléphone, et votre passkey doit confirmer
+                        chaque signature : un navigateur ne peut pas produire une
+                        signature valide.
+                    </p>
                 </div>
             {% endif %}
 
@@ -191,6 +189,67 @@
 
 <!-- Modal Gérer les Signataires -->
 {% if is_owner %}
+    <!-- Version history: every revision, and what it invalidated -->
+    <div class="mb-5">
+        <h5 class="fw-bold text-white mb-3">
+            <i class="fa-solid fa-code-branch me-2" style="color: var(--token-accent-indigo);"></i>Versions ({{ versions|length }})
+        </h5>
+        <div class="list-group">
+            {% for version in versions %}
+                <div class="list-group-item text-white p-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="fw-bold d-block text-white">
+                                Version {{ version.version_number }}
+                                {% if version.pk == current_version.pk %}
+                                    <span class="badge badge-status badge-signed ms-1">Actuelle</span>
+                                {% endif %}
+                            </span>
+                            <span class="text-token-muted small">
+                                Déposée le {{ version.created_at|date:"d/m/Y H:i" }}
+                                {% if version.created_by %}par {{ version.created_by.profile.name|default:version.created_by.username }}{% endif %}
+                            </span>
+                        </div>
+                        <span class="text-token-muted small">{{ version.signatures.count }} signature(s)</span>
+                    </div>
+                    <code class="text-token-accent small d-block text-break mt-2">{{ version.sha256 }}</code>
+                </div>
+            {% empty %}
+                <div class="list-group-item text-token-muted text-center py-3" style="background: var(--token-bg-surface); border-color: var(--token-border);">
+                    Aucune version enregistrée.
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if is_owner and document.status != 'archived' %}
+    <div class="modal fade" id="versionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: var(--token-bg-card); border: 1px solid var(--token-border);">
+                <div class="modal-header" style="border-color: var(--token-border);">
+                    <h5 class="modal-title text-white">Déposer une nouvelle version</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <form method="POST" action="{% url 'chiffrement_app:upload_version' document_id=document.id %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <p class="text-token-muted small">
+                            Le contenu actuel sera conservé comme version {{ document.version_number }}.
+                            Toutes les signatures déjà recueillies cesseront de valoir pour ce
+                            document : chaque signataire devra signer à nouveau.
+                        </p>
+                        <input type="file" name="file" class="form-control" required>
+                    </div>
+                    <div class="modal-footer" style="border-color: var(--token-border);">
+                        <button type="button" class="btn btn-outline-custom" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-gradient-primary">Déposer la version</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-white" style="background: var(--token-bg-surface); border: 1px solid var(--token-border-strong);">
